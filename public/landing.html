@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LectAI — YouTube AI Learning Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --black:#080808;--white:#f0ede6;--red:#d44a1a;
+  --dim:#2a2a2a;--muted:#888;--border:#1e1e1e;
+  --ff-d:'Syne',sans-serif;--ff-b:'Outfit',sans-serif;--ff-m:'IBM Plex Mono',monospace;
+}
+html{scroll-behavior:smooth}
+body{background:var(--black);color:var(--white);font-family:var(--ff-b);overflow-x:hidden}
+
+/* NAV */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:1.2rem 2.5rem;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;background:var(--black)}
+.logo{font-family:var(--ff-m);font-size:1rem;font-weight:500}
+.logo b{color:var(--red)}
+.nav-r{display:flex;align-items:center;gap:1.75rem}
+.nav-r a{text-decoration:none;color:var(--muted);font-size:.82rem;font-family:var(--ff-m);transition:color .2s}
+.nav-r a:hover{color:var(--white)}
+.btn-n{background:var(--red)!important;color:var(--white)!important;padding:.4rem 1.1rem;border-radius:3px}
+
+/* HERO */
+.hero{padding:5rem 2.5rem 0;border-bottom:1px solid var(--border)}
+.eyebrow{font-family:var(--ff-m);font-size:.72rem;color:var(--red);letter-spacing:.15em;text-transform:uppercase;margin-bottom:2rem;display:flex;align-items:center;gap:.75rem}
+.eyebrow::after{content:'';flex:1;height:1px;background:var(--border)}
+h1{font-family:var(--ff-d);font-size:clamp(3.5rem,8vw,7rem);line-height:.95;font-weight:800;letter-spacing:-.03em;margin-bottom:2.5rem}
+.stroke{-webkit-text-stroke:1px var(--white);color:transparent}
+.accent{color:var(--red)}
+.hero-bottom{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border);margin-top:3rem}
+.hero-desc{padding:2rem 2rem 2rem 0;border-right:1px solid var(--border)}
+.hero-desc p{font-size:1.05rem;color:#aaa;line-height:1.7;max-width:420px;margin-bottom:2rem;font-weight:300}
+.btns{display:flex;gap:.75rem;flex-wrap:wrap}
+.btn-p{background:var(--red);color:var(--white);border:none;padding:.8rem 1.75rem;font-family:var(--ff-b);font-size:.9rem;font-weight:500;border-radius:3px;cursor:pointer;transition:background .15s,transform .1s;text-decoration:none;display:inline-block}
+.btn-p:hover{background:#b83d12;transform:translateY(-1px)}
+.btn-g{background:transparent;color:var(--white);border:1px solid var(--dim);padding:.8rem 1.75rem;font-family:var(--ff-b);font-size:.9rem;border-radius:3px;cursor:pointer;transition:border-color .2s;text-decoration:none;display:inline-block}
+.btn-g:hover{border-color:#555}
+.hero-demo{padding:2rem;background:#0d0d0d}
+
+/* CHAT WINDOW */
+.chat-window{background:#111;border:1px solid var(--border);border-radius:5px;overflow:hidden}
+.cw-bar{background:#161616;padding:.6rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.5rem}
+.d{width:9px;height:9px;border-radius:50%}
+.dr{background:#3a1212}.dy{background:#3a3010}.dg{background:#0d2e0d}
+.cw-title{font-family:var(--ff-m);font-size:.68rem;color:#555;margin-left:.25rem}
+.live-badge{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--ff-m);font-size:.68rem;padding:.3rem .7rem;border:1px solid #1a3a1a;background:#0a1a0a;color:#4ade80;border-radius:2px;margin-left:auto}
+.live-dot{width:5px;height:5px;border-radius:50%;background:#4ade80;animation:lp 2s ease-in-out infinite}
+@keyframes lp{0%,100%{opacity:1}50%{opacity:.2}}
+.cw-body{padding:1.5rem}
+.msg{padding:.85rem 1.1rem;border-radius:5px;font-size:.82rem;line-height:1.65;margin-bottom:.85rem;max-width:88%}
+.mu{background:#1a1a1a;color:#ccc;margin-left:auto;border-bottom-right-radius:2px}
+.ma{background:#0e1e10;color:#90d090;border-bottom-left-radius:2px;border:1px solid #1a3020}
+.ml{font-family:var(--ff-m);font-size:.62rem;margin-bottom:.35rem;opacity:.4}
+.typing{display:inline-flex;gap:4px;padding:.65rem 1rem;background:#1a1a1a;border-radius:5px}
+.typing span{width:5px;height:5px;border-radius:50%;background:#555}
+.typing span:nth-child(1){animation:bounce .8s ease-in-out infinite}
+.typing span:nth-child(2){animation:bounce .8s .15s ease-in-out infinite}
+.typing span:nth-child(3){animation:bounce .8s .3s ease-in-out infinite}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+
+/* TICKER */
+.ticker-wrap{overflow:hidden;border-bottom:1px solid var(--border);padding:.75rem 0;background:#0d0d0d}
+.ticker{display:flex;gap:4rem;white-space:nowrap;animation:tick 28s linear infinite}
+.ticker-item{font-family:var(--ff-m);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:.75rem;flex-shrink:0}
+.ticker-item .tdot{width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0}
+@keyframes tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border)}
+.stat{padding:2.5rem 2rem;border-right:1px solid var(--border)}
+.stat:last-child{border-right:none}
+.stat-n{font-family:var(--ff-d);font-size:3rem;font-weight:800;color:var(--white);line-height:1}
+.stat-n span{color:var(--red)}
+.stat-l{font-family:var(--ff-m);font-size:.7rem;color:var(--muted);margin-top:.5rem;text-transform:uppercase;letter-spacing:.1em}
+
+/* HOW IT WORKS */
+.section{padding:5rem 2.5rem;border-bottom:1px solid var(--border)}
+.sec-label{font-family:var(--ff-m);font-size:.7rem;color:var(--red);letter-spacing:.14em;text-transform:uppercase;margin-bottom:1.25rem}
+h2{font-family:var(--ff-d);font-size:clamp(2rem,4vw,3.2rem);line-height:1.05;font-weight:800;letter-spacing:-.03em}
+.steps-grid{display:grid;grid-template-columns:repeat(3,1fr);margin-top:3.5rem;border:1px solid var(--border);border-radius:4px;overflow:hidden}
+.step{padding:2.25rem;border-right:1px solid var(--border)}
+.step:last-child{border-right:none}
+.step-n{font-family:var(--ff-m);font-size:.68rem;color:var(--red);letter-spacing:.1em;margin-bottom:1.25rem;display:block}
+.step h3{font-family:var(--ff-d);font-size:1.3rem;font-weight:700;margin-bottom:.75rem;color:var(--white)}
+.step p{font-size:.85rem;color:#888;line-height:1.65}
+
+/* FEATURES */
+.feat-grid{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border)}
+.feat-left{padding:5rem 2.5rem;border-right:1px solid var(--border)}
+.feat-right{padding:5rem 2.5rem;background:#0a0a0a}
+.feat-list{margin-top:2.5rem;display:flex;flex-direction:column;gap:1.5rem}
+.fi{display:flex;align-items:flex-start;gap:1rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border)}
+.fi:last-child{border-bottom:none;padding-bottom:0}
+.fi-icon{width:28px;height:28px;border:1px solid var(--dim);border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.fi-icon svg{width:13px;height:13px;stroke:var(--red);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fi-t{font-size:.9rem;font-weight:500;color:var(--white);margin-bottom:.3rem}
+.fi-d{font-size:.82rem;color:#777;line-height:1.6}
+
+/* STACK */
+.stack-row{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:2rem}
+.badge{font-family:var(--ff-m);font-size:.72rem;padding:.35rem .85rem;border-radius:2px;border:1px solid var(--dim);color:#aaa}
+.badge.hot{border-color:#3a1a0a;background:#1a0d06;color:#d4733a}
+
+/* BENCH */
+.bench{margin-top:2.5rem;padding:1.5rem;background:#0d0d0d;border-radius:4px;border:1px solid var(--border)}
+.bench-label{font-family:var(--ff-m);font-size:.7rem;color:#555;margin-bottom:.75rem}
+.bar-row{display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem}
+.bar-row:last-child{margin-bottom:0}
+.bar-label{font-family:var(--ff-m);font-size:.7rem;color:#666;width:80px;flex-shrink:0}
+.bar-track{flex:1;background:#1a1a1a;border-radius:2px;height:6px}
+.bar-fill{height:100%;border-radius:2px}
+.bar-val{font-family:var(--ff-m);font-size:.7rem;color:#555;width:40px;text-align:right}
+
+/* CTA */
+.cta-block{padding:6rem 2.5rem;text-align:center;background:var(--white)}
+.cta-block h2{color:var(--black)!important;margin-bottom:1rem}
+.cta-block p{color:#555;font-size:1.05rem;max-width:480px;margin:0 auto 2.5rem;font-weight:300}
+.btn-cta{background:var(--black);color:var(--white);border:none;padding:.9rem 2.5rem;font-family:var(--ff-b);font-size:1rem;font-weight:500;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;transition:background .2s}
+.btn-cta:hover{background:#1a1a1a}
+.cta-sub{font-family:var(--ff-m);font-size:.72rem;color:#aaa;margin-top:1rem}
+
+/* FOOTER */
+.footer{display:flex;align-items:center;justify-content:space-between;padding:1.5rem 2.5rem;border-top:1px solid var(--border)}
+.fl{font-family:var(--ff-m);font-size:.85rem;font-weight:500}
+.fl b{color:var(--red)}
+.fc{font-family:var(--ff-m);font-size:.7rem;color:#555}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  h1{font-size:3.5rem}
+  .hero-bottom,.feat-grid{grid-template-columns:1fr}
+  .steps-grid{grid-template-columns:1fr}
+  .step{border-right:none;border-bottom:1px solid var(--border)}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .hero-desc{border-right:none}
+  .feat-left{border-right:none}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo">Lect<b>AI</b></div>
+  <div class="nav-r">
+    <a href="#how">how it works</a>
+    <a href="#features">features</a>
+    <a href="https://github.com" target="_blank">github</a>
+    <a href="#app" class="btn-n">launch app</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="eyebrow">YouTube AI Learning Agent <span style="color:#555;margin-left:.5rem">v1.0 · open source</span></div>
+  <h1>
+    Stop<br>
+    <span class="stroke">watching.</span><br>
+    Start <span class="accent">asking.</span>
+  </h1>
+  <div class="hero-bottom">
+    <div class="hero-desc">
+      <p>Paste any YouTube URL. Ask anything about it in plain language. LectAI reads the full transcript and answers in under a second — powered by LLaMA 3.1 on Groq's blazing-fast inference.</p>
+      <div class="btns">
+        <a href="#app" class="btn-p">Try it free</a>
+        <a href="https://github.com" target="_blank" class="btn-g">View source</a>
+      </div>
+    </div>
+    <div class="hero-demo">
+      <div class="chat-window">
+        <div class="cw-bar">
+          <div class="d dr"></div><div class="d dy"></div><div class="d dg"></div>
+          <span class="cw-title">LectAI · active session</span>
+          <div class="live-badge"><div class="live-dot"></div>live</div>
+        </div>
+        <div class="cw-body">
+          <div class="msg mu"><div class="ml">you</div>youtube.com/watch?v=kCc8FmEb1nY<br>What does Andrej say about attention?</div>
+          <div class="msg ma"><div class="ml">LectAI · llama 3.1</div>At 34:12, Karpathy explains that attention lets every token directly attend to every other token — eliminating the bottleneck of sequential RNNs. He calls this the key architectural insight behind the transformer's success.</div>
+          <div class="msg mu"><div class="ml">you</div>Give me 3 quiz questions on this</div>
+          <div class="typing"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="ticker-wrap">
+  <div class="ticker" id="ticker">
+    <div class="ticker-item"><div class="tdot"></div>3Blue1Brown · Neural Networks<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ summarized</span></div>
+    <div class="ticker-item"><div class="tdot"></div>Andrej Karpathy · GPT from scratch<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ analyzed</span></div>
+    <div class="ticker-item"><div class="tdot"></div>MIT OCW · Linear Algebra Lec 1<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ quiz ready</span></div>
+    <div class="ticker-item"><div class="tdot"></div>Stanford CS231n · CNNs explained<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ summarized</span></div>
+    <div class="ticker-item"><div class="tdot"></div>Lex Fridman · Sam Altman interview<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ key moments</span></div>
+    <div class="ticker-item"><div class="tdot"></div>Y Combinator · How to start a startup<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ notes saved</span></div>
+    <div class="ticker-item"><div class="tdot"></div>3Blue1Brown · Neural Networks<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ summarized</span></div>
+    <div class="ticker-item"><div class="tdot"></div>Andrej Karpathy · GPT from scratch<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ analyzed</span></div>
+    <div class="ticker-item"><div class="tdot"></div>MIT OCW · Linear Algebra Lec 1<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ quiz ready</span></div>
+    <div class="ticker-item"><div class="tdot"></div>Stanford CS231n · CNNs explained<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ summarized</span></div>
+    <div class="ticker-item"><div class="tdot"></div>Lex Fridman · Sam Altman interview<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ key moments</span></div>
+    <div class="ticker-item"><div class="tdot"></div>Y Combinator · How to start a startup<span style="color:#4ade80;font-size:.68rem;margin-left:.5rem">✓ notes saved</span></div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-n">3.1<span>×</span></div><div class="stat-l">LLaMA model</div></div>
+  <div class="stat"><div class="stat-n">&lt;<span>1</span>s</div><div class="stat-l">avg response</div></div>
+  <div class="stat"><div class="stat-n"><span>∞</span></div><div class="stat-l">YouTube videos</div></div>
+  <div class="stat"><div class="stat-n">100<span>%</span></div><div class="stat-l">open source</div></div>
+</div>
+
+<section class="section" id="how">
+  <div class="sec-label">How it works</div>
+  <h2>Three steps.<br>One breakthrough.</h2>
+  <div class="steps-grid">
+    <div class="step">
+      <span class="step-n">01 · FETCH</span>
+      <h3>Drop a URL</h3>
+      <p>Our Python fetcher pulls the full transcript from any public YouTube video. Captions, auto-generated or manual — we grab them all instantly.</p>
+    </div>
+    <div class="step">
+      <span class="step-n">02 · PROCESS</span>
+      <h3>LLaMA reads it</h3>
+      <p>Your question + the full transcript is sent to LLaMA 3.1-70B via Groq. Multi-key rotation means zero rate-limit delays at scale.</p>
+    </div>
+    <div class="step">
+      <span class="step-n">03 · LEARN</span>
+      <h3>Ask anything</h3>
+      <p>Summaries, quizzes, timestamp references — every answer is grounded in the exact words of the video. No hallucinations. No fluff.</p>
+    </div>
+  </div>
+</section>
+
+<div class="feat-grid" id="features">
+  <div class="feat-left">
+    <div class="sec-label">Why LectAI</div>
+    <h2>Built for people<br>who ship fast.</h2>
+    <div class="feat-list">
+      <div class="fi">
+        <div class="fi-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <div><div class="fi-t">Groq-speed inference</div><div class="fi-d">Sub-second responses via Groq's LPU chips. Rotating API keys means it never throttles under load.</div></div>
+      </div>
+      <div class="fi">
+        <div class="fi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></div>
+        <div><div class="fi-t">Any video, any length</div><div class="fi-d">Lectures, interviews, documentaries. If it has captions on YouTube, LectAI can reason about it end-to-end.</div></div>
+      </div>
+      <div class="fi">
+        <div class="fi-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <div><div class="fi-t">Session memory</div><div class="fi-d">Ask follow-ups, go deeper on any point. Full conversation context is preserved through your session.</div></div>
+      </div>
+      <div class="fi">
+        <div class="fi-icon"><svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+        <div><div class="fi-t">Fully open source</div><div class="fi-d">React + Node.js + Python. Every line of code is on GitHub. Fork it, extend it, self-host it.</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="feat-right">
+    <div class="sec-label">Stack</div>
+    <h2>Production<br>grade. Always.</h2>
+    <div class="stack-row">
+      <div class="badge hot">React 18</div>
+      <div class="badge hot">Node.js + Express</div>
+      <div class="badge hot">LLaMA 3.1-70B</div>
+      <div class="badge hot">Groq API</div>
+      <div class="badge">Python 3</div>
+      <div class="badge">yt-dlp</div>
+      <div class="badge">Multi-key rotation</div>
+      <div class="badge">Railway</div>
+      <div class="badge">Vercel</div>
+    </div>
+    <div class="bench">
+      <div class="bench-label">latency benchmark · real world</div>
+      <div class="bar-row">
+        <div class="bar-label">transcript</div>
+        <div class="bar-track"><div class="bar-fill" style="width:15%;background:#333"></div></div>
+        <div class="bar-val">~0.3s</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">LLM inference</div>
+        <div class="bar-track"><div class="bar-fill" style="width:55%;background:#d44a1a"></div></div>
+        <div class="bar-val">~0.6s</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">total</div>
+        <div class="bar-track"><div class="bar-fill" style="width:70%;background:#4ade80"></div></div>
+        <div class="bar-val" style="color:#4ade80">~0.9s</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cta-block" id="app">
+  <h2>Your next lecture<br>is already answered.</h2>
+  <p>Stop pausing and rewinding. Start asking in plain language and learning 10× faster.</p>
+  <a href="/app" class="btn-cta">Open LectAI — it's free</a>
+  <div class="cta-sub">No signup required · Open source · Self-hostable</div>
+</div>
+
+<footer class="footer">
+  <div class="fl">Lect<b>AI</b></div>
+  <div class="fc">Built by Akshit · Ishita </div>
+  <div class="fc">2026</div>
+</footer>
+
+</body>
+</html>
