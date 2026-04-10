@@ -98,36 +98,53 @@ export default function App() {
   };
 
   const handleProcess = async () => {
-    if (!url.trim()) return;
-    setLoading(true); setError(null); setSessionId(null);
-    setSummary(null); setFlashcards(null); setTimestamps(null);
-    setChatHistory([]); setFlipped({});
+  if (!url.trim()) return;
+  setLoading(true); setError(null); setSessionId(null);
+  setSummary(null); setFlashcards(null); setTimestamps(null);
+  setChatHistory([]); setFlipped({});
 
-    try {
-      const res = await fetch(`${API}/process-video`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error === "Failed to get transcript"
-          ? "This video has no captions. Try a video with CC/subtitles enabled."
-          : data.error || "Failed to process video.");
-        setLoading(false); return;
-      }
-      setSessionId(data.session_id);
-      setLoading(false);
-      setActiveTab("summary");
-      setSummaryLoading(true);
-      setFlashcardsLoading(true);
-      fetchSummary(data.session_id);
-      fetchFlashcards(data.session_id);
-      fetchTimestamps(data.session_id);
-    } catch {
-      setError("Cannot reach server. Make sure backend is running.");
-      setLoading(false);
+  // Wake up Render from sleep first
+  try {
+    await fetch(`${API}/health`);
+    await new Promise(r => setTimeout(r, 2000));
+  } catch(e) {}
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000);
+
+    const res = await fetch(`${API}/process-video`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error === "Failed to get transcript"
+        ? "This video has no captions. Try a video with CC/subtitles enabled."
+        : data.error || "Failed to process video.");
+      setLoading(false); return;
     }
-  };
+    setSessionId(data.session_id);
+    setLoading(false);
+    setActiveTab("summary");
+    setSummaryLoading(true);
+    setFlashcardsLoading(true);
+    fetchSummary(data.session_id);
+    fetchFlashcards(data.session_id);
+    fetchTimestamps(data.session_id);
+  } catch(err) {
+    if (err.name === "AbortError") {
+      setError("Request timed out. The server is waking up — please try again in 30 seconds.");
+    } else {
+      setError("Cannot reach server. Make sure backend is running.");
+    }
+    setLoading(false);
+  }
+};
 
   const fetchSummary = async (sid) => {
     try {
