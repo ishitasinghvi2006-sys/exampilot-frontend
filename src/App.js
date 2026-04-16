@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 
 const API = "https://lectai-backend.onrender.com";
 
@@ -12,7 +12,12 @@ export default function App() {
   const [todayPlan, setTodayPlan] = useState(null);
   const [view, setView] = useState("today");
 
+  const resultRef = useRef(null);
+
   const handleGenerate = async () => {
+    if (!syllabus.trim()) return setError("Paste your syllabus");
+    if (!examDate) return setError("Select exam date");
+
     setLoading(true);
     setError(null);
 
@@ -27,7 +32,12 @@ export default function App() {
 
       setPlan(data.plan);
       setTodayPlan(data.todayPlan);
-    } catch (err) {
+
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 200);
+
+    } catch {
       setError("Failed to fetch");
     } finally {
       setLoading(false);
@@ -35,47 +45,146 @@ export default function App() {
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: "60px auto", color: "white" }}>
-      <h1>ExamPilot 🚀</h1>
+    <>
+      <style>{`
+        body {
+          margin: 0;
+          font-family: Inter, sans-serif;
+          background: radial-gradient(circle at top, #0f0f1a, #050509);
+          color: #fff;
+        }
 
-      {!plan && (
-        <>
-          <textarea
-            placeholder="Paste syllabus"
-            value={syllabus}
-            onChange={(e) => setSyllabus(e.target.value)}
-          />
+        .container {
+          max-width: 750px;
+          margin: 80px auto;
+          padding: 20px;
+        }
 
-          <input type="date" onChange={(e) => setExamDate(e.target.value)} />
+        .title {
+          font-size: 42px;
+          font-weight: 700;
+        }
 
-          <input
-            type="number"
-            value={hoursPerDay}
-            onChange={(e) => setHoursPerDay(e.target.value)}
-          />
+        .subtitle {
+          color: #888;
+          margin-bottom: 30px;
+        }
 
-          <button onClick={handleGenerate}>
-            {loading ? "Generating..." : "Generate"}
-          </button>
+        .card {
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.1);
+          padding: 25px;
+          border-radius: 16px;
+        }
 
-          {error && <p>{error}</p>}
-        </>
-      )}
+        textarea, input {
+          width: 100%;
+          padding: 12px;
+          margin-bottom: 12px;
+          border-radius: 10px;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(0,0,0,0.4);
+          color: white;
+        }
 
-      {plan && (
-        <>
-          <div>
-            <button onClick={() => setView("today")}>Today</button>
-            <button onClick={() => setView("full")}>Full Plan</button>
+        button {
+          width: 100%;
+          padding: 14px;
+          border-radius: 10px;
+          border: none;
+          background: linear-gradient(135deg, #7c6aff, #5b4bff);
+          color: white;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .toggle {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 15px;
+        }
+
+        .toggle button {
+          flex: 1;
+          background: rgba(255,255,255,0.1);
+        }
+
+        .active {
+          background: #7c6aff !important;
+        }
+
+        .result {
+          margin-top: 20px;
+          white-space: pre-wrap;
+          line-height: 1.6;
+          background: rgba(255,255,255,0.05);
+          padding: 20px;
+          border-radius: 12px;
+        }
+
+        .error {
+          color: #ff6b6b;
+          margin-top: 10px;
+        }
+      `}</style>
+
+      <div className="container">
+        <div className="title">ExamPilot 🚀</div>
+        <div className="subtitle">
+          Turn your syllabus into a personalized exam plan
+        </div>
+
+        {!plan && (
+          <div className="card">
+            <textarea
+              placeholder="Paste syllabus..."
+              value={syllabus}
+              onChange={(e) => setSyllabus(e.target.value)}
+            />
+
+            <input type="date" onChange={(e) => setExamDate(e.target.value)} />
+
+            <input
+              type="number"
+              value={hoursPerDay}
+              onChange={(e) => setHoursPerDay(e.target.value)}
+            />
+
+            <button onClick={handleGenerate}>
+              {loading ? "Generating..." : "Generate Study Plan"}
+            </button>
+
+            {error && <div className="error">{error}</div>}
           </div>
+        )}
 
-          <pre style={{ whiteSpace: "pre-wrap" }}>
-            {view === "today" ? todayPlan : plan}
-          </pre>
+        {plan && (
+          <div ref={resultRef}>
+            <div className="toggle">
+              <button
+                className={view === "today" ? "active" : ""}
+                onClick={() => setView("today")}
+              >
+                🔥 Today Plan
+              </button>
+              <button
+                className={view === "full" ? "active" : ""}
+                onClick={() => setView("full")}
+              >
+                📚 Full Plan
+              </button>
+            </div>
 
-          <button onClick={() => setPlan(null)}>Reset</button>
-        </>
-      )}
-    </div>
+            <div className="result">
+              {view === "today" ? todayPlan : plan}
+            </div>
+
+            <button style={{ marginTop: 15 }} onClick={() => setPlan(null)}>
+              ← New Plan
+            </button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
