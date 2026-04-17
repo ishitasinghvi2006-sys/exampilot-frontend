@@ -29,8 +29,6 @@ function buildApiCandidates() {
     candidates.push(`${normalized.replace(/\/$/, "")}/study-plan`);
   });
 
-  candidates.push("/study-plan", "/api/study-plan");
-
   return [...new Set(candidates)];
 }
 
