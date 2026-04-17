@@ -118,7 +118,7 @@ function normalizeTextSection(section, index) {
   const taskLines = lines.slice(1).map(cleanLine).filter(Boolean);
   const looksLikeDayHeading = /^day\s*\d+/i.test(firstLine);
   const inlineSummary = looksLikeDayHeading
-    ? firstLine.replace(/^day\s*\d+\s*[:\-]?\s*/i, "").trim()
+  ? firstLine.replace(/^day\s*\d+\s*[:-]?\s*/i, "").trim()
     : "";
 
   return {
