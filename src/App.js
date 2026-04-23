@@ -5,14 +5,37 @@ const FREE_FULL_PLAN_LIMIT = 3;
 const PLAN_USAGE_STORAGE_KEY = "exampilot-full-plan-usage-count";
 const UPI_ID = "agrawalakshit0809-1@okaxis";
 const WHATSAPP_NUMBER = "918160971738";
+const PAYMENT_AMOUNT = "49";
+const UPI_PAYEE_NAME = "ExamPilot";
 const DEFAULT_BACKEND_BASE = "https://lectai-backend.onrender.com";
+
+const SECTION_HEADING_PATTERN =
+  /^(Morning(?:\s*\([^)]*\))?|Evening(?:\s*\([^)]*\))?|Must Finish Today|Practice|Revision Check|Key Points|Practice Questions|Memory Tricks|Focus|Why This Day Matters)\s*:?\s*(.*)$/i;
 
 function buildWhatsAppLink() {
   const message = encodeURIComponent(
-    "Hi ExamPilot, I paid Rs 49 to unlock my full study plan. Sharing my payment screenshot here."
+    `Hi ExamPilot, I paid Rs ${PAYMENT_AMOUNT} to unlock my full study plan. Sharing my payment screenshot here.`
   );
 
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
+}
+
+function buildUpiPaymentLink() {
+  const params = new URLSearchParams({
+    pa: UPI_ID,
+    pn: UPI_PAYEE_NAME,
+    am: PAYMENT_AMOUNT,
+    cu: "INR",
+    tn: "ExamPilot full plan unlock",
+  });
+
+  return `upi://pay?${params.toString()}`;
+}
+
+function buildQrImageUrl() {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
+    buildUpiPaymentLink()
+  )}`;
 }
 
 function getStoredPlanUsageCount() {
@@ -132,6 +155,53 @@ function formatDayTitle(value, index) {
   return `Day ${index + 1}: ${cleaned}`;
 }
 
+function countPlanTasks(item) {
+  if (!item) {
+    return 0;
+  }
+
+  const sectionTasks = Array.isArray(item.sections)
+    ? item.sections.reduce((total, section) => total + section.tasks.length, 0)
+    : 0;
+
+  return sectionTasks || item.tasks.length;
+}
+
+function buildSectionsFromLines(lines) {
+  const sections = [];
+  let currentSection = null;
+
+  lines.forEach((line) => {
+    const cleaned = cleanLine(line);
+
+    if (!cleaned) {
+      return;
+    }
+
+    const sectionMatch = cleaned.match(SECTION_HEADING_PATTERN);
+
+    if (sectionMatch) {
+      currentSection = {
+        title: sectionMatch[1].trim(),
+        tasks: sectionMatch[2] ? [sectionMatch[2].trim()] : [],
+      };
+      sections.push(currentSection);
+      return;
+    }
+
+    if (currentSection) {
+      currentSection.tasks.push(cleaned);
+    }
+  });
+
+  return sections
+    .map((section) => ({
+      ...section,
+      tasks: uniqueLines(section.tasks.map(cleanLine).filter(Boolean)),
+    }))
+    .filter((section) => section.tasks.length > 0);
+}
+
 function normalizeTextSection(section, index) {
   const lines = String(section || "")
     .replace(/\r/g, "")
@@ -149,11 +219,13 @@ function normalizeTextSection(section, index) {
   const inlineSummary = looksLikeDayHeading
     ? firstLine.replace(/^day\s*\d+\s*[:-]?\s*/i, "").trim()
     : "";
+  const sections = buildSectionsFromLines(lines.slice(1));
 
   return {
     id: `plan-item-${index}`,
     title: looksLikeDayHeading ? firstLine : `Day ${index + 1}`,
     summary: taskLines.length ? "" : inlineSummary,
+    sections,
     tasks: taskLines.length ? taskLines : looksLikeDayHeading ? [] : lines.map(cleanLine).filter(Boolean),
   };
 }
@@ -194,11 +266,17 @@ function normalizePlanItem(item, index) {
         item.overview ||
         ""
     ).trim() || "";
+  const sections = [
+    ...buildSectionsFromLines(toTaskList(item.tasks)),
+    ...buildSectionsFromLines(toTaskList(item.plan)),
+    ...buildSectionsFromLines(toTaskList(item.content)),
+  ];
 
   return {
     id: `plan-item-${index}`,
     title,
     summary: tasks.length ? summary : "",
+    sections,
     tasks: tasks.length ? tasks : toTaskList(summary),
   };
 }
@@ -330,6 +408,8 @@ async function requestPlan(payload) {
 }
 
 function PlanCard({ item, highlight }) {
+  const taskCount = countPlanTasks(item);
+
   return (
     <div
       style={{
@@ -345,14 +425,29 @@ function PlanCard({ item, highlight }) {
           <p style={styles.planEyebrow}>{highlight ? "Free Today View" : "Study Day"}</p>
           <h3 style={styles.planTitle}>{item.title}</h3>
         </div>
-        {item.tasks.length > 0 ? (
-          <span style={styles.taskCount}>{item.tasks.length} tasks</span>
+        {taskCount > 0 ? (
+          <span style={styles.taskCount}>{taskCount} tasks</span>
         ) : null}
       </div>
 
       {item.summary ? <p style={styles.planSummary}>{item.summary}</p> : null}
 
-      {item.tasks.length > 0 ? (
+      {item.sections && item.sections.length > 0 ? (
+        <div style={styles.sectionStack}>
+          {item.sections.map((section) => (
+            <div key={`${item.id}-${section.title}`} style={styles.sectionCard}>
+              <p style={styles.sectionTitle}>{section.title}</p>
+              <ul style={styles.taskList}>
+                {section.tasks.map((task, index) => (
+                  <li key={`${item.id}-${section.title}-${index}`} style={styles.taskItem}>
+                    {task}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : item.tasks.length > 0 ? (
         <ul style={styles.taskList}>
           {item.tasks.map((task, index) => (
             <li key={`${item.id}-task-${index}`} style={styles.taskItem}>
@@ -679,26 +774,39 @@ export default function App() {
                     {hiddenDayCount > 0 ? (
                       <div style={styles.paywallCard}>
                         <div style={styles.lockBadge}>Payment Required</div>
-                        <h3 style={styles.paywallTitle}>Unlock full plan for Rs 49</h3>
+                        <h3 style={styles.paywallTitle}>Unlock full plan for Rs {PAYMENT_AMOUNT}</h3>
                         <p style={styles.paywallCopy}>
                           Your first {FREE_FULL_PLAN_LIMIT} full plans were free. From the
                           4th plan onward, only the first {FREE_PREVIEW_DAYS} days stay
                           visible. The remaining {hiddenDayCount} day
                           {hiddenDayCount > 1 ? "s are" : " is"} locked for this plan.
                         </p>
-                        <div style={styles.paywallDetails}>
-                          <p style={styles.paywallLine}>UPI: {UPI_ID}</p>
-                          <p style={styles.paywallLine}>
-                            Pay Rs 49 and send the screenshot on WhatsApp.
-                          </p>
-                          <a
-                            href={buildWhatsAppLink()}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={styles.whatsAppButton}
-                          >
-                            Open WhatsApp
-                          </a>
+                        <div style={styles.paywallGrid}>
+                          <div style={styles.qrCard}>
+                            <img
+                              src={buildQrImageUrl()}
+                              alt="ExamPilot payment QR"
+                              style={styles.qrImage}
+                            />
+                            <a href={buildUpiPaymentLink()} style={styles.payButton}>
+                              Pay with UPI App
+                            </a>
+                          </div>
+                          <div style={styles.paywallDetails}>
+                            <p style={styles.paywallLine}>UPI: {UPI_ID}</p>
+                            <p style={styles.paywallLine}>Amount: Rs {PAYMENT_AMOUNT}</p>
+                            <p style={styles.paywallLine}>
+                              Scan the QR or pay via UPI, then send the screenshot on WhatsApp.
+                            </p>
+                            <a
+                              href={buildWhatsAppLink()}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={styles.whatsAppButton}
+                            >
+                              Open WhatsApp
+                            </a>
+                          </div>
                         </div>
                       </div>
                     ) : null}
@@ -1018,6 +1126,24 @@ const styles = {
     color: "#cbd5e1",
     lineHeight: 1.6,
   },
+  sectionStack: {
+    display: "grid",
+    gap: "12px",
+  },
+  sectionCard: {
+    padding: "14px 16px",
+    borderRadius: "16px",
+    background: "rgba(255, 255, 255, 0.03)",
+    border: "1px solid rgba(255, 255, 255, 0.06)",
+  },
+  sectionTitle: {
+    margin: "0 0 10px",
+    color: "#99f6e4",
+    fontSize: "0.9rem",
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+  },
   taskList: {
     margin: 0,
     paddingLeft: "18px",
@@ -1063,8 +1189,43 @@ const styles = {
     color: "#cbd5e1",
     lineHeight: 1.7,
   },
-  paywallDetails: {
+  paywallGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "18px",
+    alignItems: "start",
     marginTop: "18px",
+  },
+  qrCard: {
+    padding: "16px",
+    borderRadius: "18px",
+    background: "rgba(15, 23, 42, 0.8)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    display: "grid",
+    gap: "12px",
+    justifyItems: "center",
+  },
+  qrImage: {
+    width: "100%",
+    maxWidth: "208px",
+    borderRadius: "16px",
+    background: "#ffffff",
+    padding: "10px",
+    boxSizing: "border-box",
+  },
+  payButton: {
+    width: "100%",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "12px 16px",
+    borderRadius: "14px",
+    background: "linear-gradient(135deg, #14b8a6 0%, #0f766e 100%)",
+    color: "#f8fafc",
+    textDecoration: "none",
+    fontWeight: 700,
+  },
+  paywallDetails: {
     padding: "16px",
     borderRadius: "18px",
     background: "rgba(15, 23, 42, 0.75)",
