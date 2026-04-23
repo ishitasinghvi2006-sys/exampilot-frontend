@@ -3,6 +3,9 @@ import React, { useRef, useState } from "react";
 const FREE_PREVIEW_DAYS = 2;
 const FREE_FULL_PLAN_LIMIT = 3;
 const PLAN_USAGE_STORAGE_KEY = "exampilot-full-plan-usage-count";
+const FOUNDER_MODE_STORAGE_KEY = "exampilot-founder-mode";
+const FOUNDER_MODE_QUERY_KEY = "pilot";
+const FOUNDER_MODE_QUERY_VALUE = "founder";
 const UPI_ID = "agrawalakshit0809-1@okaxis";
 const WHATSAPP_NUMBER = "918160971738";
 const PAYMENT_AMOUNT = "49";
@@ -55,6 +58,28 @@ function storePlanUsageCount(count) {
   }
 
   window.localStorage.setItem(PLAN_USAGE_STORAGE_KEY, String(count));
+}
+
+function getFounderMode() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const url = new URL(window.location.href);
+    const queryValue = url.searchParams.get(FOUNDER_MODE_QUERY_KEY);
+
+    if (queryValue === FOUNDER_MODE_QUERY_VALUE) {
+      window.localStorage.setItem(FOUNDER_MODE_STORAGE_KEY, "true");
+      url.searchParams.delete(FOUNDER_MODE_QUERY_KEY);
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      return true;
+    }
+
+    return window.localStorage.getItem(FOUNDER_MODE_STORAGE_KEY) === "true";
+  } catch (error) {
+    return false;
+  }
 }
 
 function buildApiCandidates() {
@@ -473,6 +498,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState("today");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [founderMode] = useState(getFounderMode);
   const [planUsageCount, setPlanUsageCount] = useState(getStoredPlanUsageCount);
   const [result, setResult] = useState({
     fullPlan: [],
@@ -485,7 +511,8 @@ export default function App() {
   const hasPlan = result.fullPlan.length > 0 || Boolean(result.todayPlan);
   const todayPlan = result.todayPlan || result.fullPlan[0] || null;
   const freeFullPlansLeft = Math.max(FREE_FULL_PLAN_LIMIT - planUsageCount, 0);
-  const hasFullPlanAccess = planUsageCount > 0 && planUsageCount <= FREE_FULL_PLAN_LIMIT;
+  const hasFullPlanAccess =
+    founderMode || (planUsageCount > 0 && planUsageCount <= FREE_FULL_PLAN_LIMIT);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -673,6 +700,12 @@ export default function App() {
               First {FREE_FULL_PLAN_LIMIT} full plans are free. After that, only the
               first {FREE_PREVIEW_DAYS} days stay visible until payment.
             </p>
+            {founderMode ? (
+              <p style={styles.adminText}>
+                Founder mode is enabled in this browser. Full plans stay unlocked for
+                manual delivery after payment.
+              </p>
+            ) : null}
           </form>
 
           {error ? <div style={styles.errorBox}>{error}</div> : null}
@@ -744,8 +777,12 @@ export default function App() {
                     <div style={styles.previewHeader}>
                       <p style={styles.previewTitle}>Full Plan Unlocked</p>
                       <p style={styles.previewMeta}>
-                        Free unlock {Math.min(planUsageCount, FREE_FULL_PLAN_LIMIT)} of{" "}
-                        {FREE_FULL_PLAN_LIMIT}
+                        {founderMode
+                          ? "Founder mode enabled"
+                          : `Free unlock ${Math.min(
+                              planUsageCount,
+                              FREE_FULL_PLAN_LIMIT
+                            )} of ${FREE_FULL_PLAN_LIMIT}`}
                       </p>
                     </div>
 
@@ -999,6 +1036,12 @@ const styles = {
     margin: 0,
     color: "#5eead4",
     fontSize: "0.9rem",
+    lineHeight: 1.6,
+  },
+  adminText: {
+    margin: 0,
+    color: "#fde68a",
+    fontSize: "0.88rem",
     lineHeight: 1.6,
   },
   errorBox: {
