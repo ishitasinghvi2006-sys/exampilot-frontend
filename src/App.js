@@ -1,8 +1,38 @@
 import React, { useRef, useState } from "react";
 
 const FREE_PREVIEW_DAYS = 2;
-const UPI_ID = "yourname@upi";
+const FREE_FULL_PLAN_LIMIT = 3;
+const PLAN_USAGE_STORAGE_KEY = "exampilot-full-plan-usage-count";
+const UPI_ID = "agrawalakshit0809-1@okaxis";
+const WHATSAPP_NUMBER = "918160971738";
 const DEFAULT_BACKEND_BASE = "https://lectai-backend.onrender.com";
+
+function buildWhatsAppLink() {
+  const message = encodeURIComponent(
+    "Hi ExamPilot, I paid Rs 49 to unlock my full study plan. Sharing my payment screenshot here."
+  );
+
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
+}
+
+function getStoredPlanUsageCount() {
+  if (typeof window === "undefined") {
+    return 0;
+  }
+
+  const rawValue = window.localStorage.getItem(PLAN_USAGE_STORAGE_KEY);
+  const parsedValue = Number(rawValue);
+
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : 0;
+}
+
+function storePlanUsageCount(count) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(PLAN_USAGE_STORAGE_KEY, String(count));
+}
 
 function buildApiCandidates() {
   const rawValues = [
@@ -34,6 +64,7 @@ function buildApiCandidates() {
 
 function cleanLine(value) {
   return String(value || "")
+    .replace(/\*\*/g, "")
     .replace(/^[-*\u2022\d.)\s]+/, "")
     .trim();
 }
@@ -112,11 +143,11 @@ function normalizeTextSection(section, index) {
     return null;
   }
 
-  const firstLine = lines[0];
+  const firstLine = cleanLine(lines[0]);
   const taskLines = lines.slice(1).map(cleanLine).filter(Boolean);
   const looksLikeDayHeading = /^day\s*\d+/i.test(firstLine);
   const inlineSummary = looksLikeDayHeading
-  ? firstLine.replace(/^day\s*\d+\s*[:-]?\s*/i, "").trim()
+    ? firstLine.replace(/^day\s*\d+\s*[:-]?\s*/i, "").trim()
     : "";
 
   return {
@@ -182,7 +213,7 @@ function normalizePlan(rawPlan) {
   }
 
   if (typeof rawPlan === "string") {
-    const cleaned = rawPlan.trim();
+    const cleaned = rawPlan.trim().replace(/\*\*/g, "");
 
     if (!cleaned) {
       return [];
@@ -347,6 +378,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState("today");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [planUsageCount, setPlanUsageCount] = useState(getStoredPlanUsageCount);
   const [result, setResult] = useState({
     fullPlan: [],
     todayPlan: null,
@@ -357,6 +389,8 @@ export default function App() {
   const hiddenDayCount = Math.max(result.fullPlan.length - FREE_PREVIEW_DAYS, 0);
   const hasPlan = result.fullPlan.length > 0 || Boolean(result.todayPlan);
   const todayPlan = result.todayPlan || result.fullPlan[0] || null;
+  const freeFullPlansLeft = Math.max(FREE_FULL_PLAN_LIMIT - planUsageCount, 0);
+  const hasFullPlanAccess = planUsageCount > 0 && planUsageCount <= FREE_FULL_PLAN_LIMIT;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -400,6 +434,10 @@ export default function App() {
       if (!fullPlan.length && !todayPlanData) {
         throw new Error("Plan generated, but the response format was empty.");
       }
+
+      const nextUsageCount = planUsageCount + 1;
+      setPlanUsageCount(nextUsageCount);
+      storePlanUsageCount(nextUsageCount);
 
       setResult({
         fullPlan,
@@ -536,6 +574,10 @@ export default function App() {
               ExamPilot shows Today Plan first so students can start fast without
               feeling overwhelmed.
             </p>
+            <p style={styles.usageText}>
+              First {FREE_FULL_PLAN_LIMIT} full plans are free. After that, only the
+              first {FREE_PREVIEW_DAYS} days stay visible until payment.
+            </p>
           </form>
 
           {error ? <div style={styles.errorBox}>{error}</div> : null}
@@ -588,6 +630,10 @@ export default function App() {
                   {result.daysLeft !== null ? result.daysLeft : "Calculated in plan"}
                 </strong>
               </div>
+              <div style={styles.statCard}>
+                <span style={styles.statLabel}>Free Full Plans Left</span>
+                <strong style={styles.statValue}>{freeFullPlansLeft}</strong>
+              </div>
             </div>
 
             {viewMode === "today" ? (
@@ -598,38 +644,66 @@ export default function App() {
               )
             ) : (
               <>
-                <div style={styles.previewHeader}>
-                  <p style={styles.previewTitle}>Free Preview</p>
-                  <p style={styles.previewMeta}>
-                    Showing the first {Math.min(FREE_PREVIEW_DAYS, result.fullPlan.length)}{" "}
-                    of {result.fullPlan.length || 0} days
-                  </p>
-                </div>
-
-                <div style={styles.planStack}>
-                  {previewPlan.map((item) => (
-                    <PlanCard key={item.id} item={item} />
-                  ))}
-                </div>
-
-                {hiddenDayCount > 0 ? (
-                  <div style={styles.paywallCard}>
-                    <div style={styles.lockBadge}>Locked Preview</div>
-                    <h3 style={styles.paywallTitle}>Unlock full plan for Rs 49</h3>
-                    <p style={styles.paywallCopy}>
-                      You can preview the first {FREE_PREVIEW_DAYS} days free. The
-                      remaining {hiddenDayCount} day
-                      {hiddenDayCount > 1 ? "s are" : " is"} locked for this MVP
-                      monetization test.
-                    </p>
-                    <div style={styles.paywallDetails}>
-                      <p style={styles.paywallLine}>UPI: {UPI_ID}</p>
-                      <p style={styles.paywallLine}>
-                        Send screenshot on WhatsApp to unlock
+                {hasFullPlanAccess ? (
+                  <>
+                    <div style={styles.previewHeader}>
+                      <p style={styles.previewTitle}>Full Plan Unlocked</p>
+                      <p style={styles.previewMeta}>
+                        Free unlock {Math.min(planUsageCount, FREE_FULL_PLAN_LIMIT)} of{" "}
+                        {FREE_FULL_PLAN_LIMIT}
                       </p>
                     </div>
-                  </div>
-                ) : null}
+
+                    <div style={styles.planStack}>
+                      {result.fullPlan.map((item) => (
+                        <PlanCard key={item.id} item={item} />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={styles.previewHeader}>
+                      <p style={styles.previewTitle}>Free Preview</p>
+                      <p style={styles.previewMeta}>
+                        Showing the first {Math.min(FREE_PREVIEW_DAYS, result.fullPlan.length)}{" "}
+                        of {result.fullPlan.length || 0} days
+                      </p>
+                    </div>
+
+                    <div style={styles.planStack}>
+                      {previewPlan.map((item) => (
+                        <PlanCard key={item.id} item={item} />
+                      ))}
+                    </div>
+
+                    {hiddenDayCount > 0 ? (
+                      <div style={styles.paywallCard}>
+                        <div style={styles.lockBadge}>Payment Required</div>
+                        <h3 style={styles.paywallTitle}>Unlock full plan for Rs 49</h3>
+                        <p style={styles.paywallCopy}>
+                          Your first {FREE_FULL_PLAN_LIMIT} full plans were free. From the
+                          4th plan onward, only the first {FREE_PREVIEW_DAYS} days stay
+                          visible. The remaining {hiddenDayCount} day
+                          {hiddenDayCount > 1 ? "s are" : " is"} locked for this plan.
+                        </p>
+                        <div style={styles.paywallDetails}>
+                          <p style={styles.paywallLine}>UPI: {UPI_ID}</p>
+                          <p style={styles.paywallLine}>
+                            Pay Rs 49 and send the screenshot on WhatsApp.
+                          </p>
+                          <a
+                            href={buildWhatsAppLink()}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={styles.whatsAppButton}
+                          >
+                            Open WhatsApp
+                          </a>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </>
             )}
           </section>
@@ -810,6 +884,12 @@ const styles = {
   helperText: {
     margin: 0,
     color: "#94a3b8",
+    fontSize: "0.9rem",
+    lineHeight: 1.6,
+  },
+  usageText: {
+    margin: 0,
+    color: "#5eead4",
     fontSize: "0.9rem",
     lineHeight: 1.6,
   },
@@ -995,5 +1075,17 @@ const styles = {
     color: "#f8fafc",
     fontWeight: 600,
     lineHeight: 1.6,
+  },
+  whatsAppButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: "12px",
+    padding: "12px 16px",
+    borderRadius: "14px",
+    background: "#16a34a",
+    color: "#f8fafc",
+    fontWeight: 700,
+    textDecoration: "none",
   },
 };
