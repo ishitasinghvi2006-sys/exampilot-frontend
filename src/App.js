@@ -1,8 +1,10 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 const FREE_PREVIEW_DAYS = 2;
 const FREE_FULL_PLAN_LIMIT = 3;
 const PLAN_USAGE_STORAGE_KEY = "exampilot-full-plan-usage-count";
+const PLAN_SESSION_STORAGE_KEY = "exampilot-current-plan-session";
+const PLAN_PROGRESS_STORAGE_PREFIX = "exampilot-plan-progress";
 const FOUNDER_MODE_STORAGE_KEY = "exampilot-founder-mode";
 const FOUNDER_MODE_QUERY_KEY = "pilot";
 const FOUNDER_MODE_QUERY_VALUE = "founder";
@@ -41,6 +43,17 @@ function buildQrImageUrl() {
   )}`;
 }
 
+function hashString(value) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(index);
+    hash |= 0;
+  }
+
+  return Math.abs(hash).toString(36);
+}
+
 function getStoredPlanUsageCount() {
   if (typeof window === "undefined") {
     return 0;
@@ -58,6 +71,91 @@ function storePlanUsageCount(count) {
   }
 
   window.localStorage.setItem(PLAN_USAGE_STORAGE_KEY, String(count));
+}
+
+function getProgressStorageKey(planKey) {
+  return `${PLAN_PROGRESS_STORAGE_PREFIX}:${planKey}`;
+}
+
+function loadStoredPlanSession() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(PLAN_SESSION_STORAGE_KEY);
+
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+
+    if (!parsedValue || typeof parsedValue !== "object") {
+      return null;
+    }
+
+    return parsedValue;
+  } catch (error) {
+    return null;
+  }
+}
+
+function storePlanSession(session) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(PLAN_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+function clearStoredPlanSession() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(PLAN_SESSION_STORAGE_KEY);
+}
+
+function loadStoredProgress(planKey) {
+  if (typeof window === "undefined" || !planKey) {
+    return {};
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(getProgressStorageKey(planKey));
+
+    if (!rawValue) {
+      return {};
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+    return parsedValue && typeof parsedValue === "object" ? parsedValue : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function storeProgress(planKey, progressMap) {
+  if (typeof window === "undefined" || !planKey) {
+    return;
+  }
+
+  window.localStorage.setItem(
+    getProgressStorageKey(planKey),
+    JSON.stringify(progressMap)
+  );
+}
+
+function buildPlanKey({ examType, examDate, studyHours, fullPlan }) {
+  return hashString(
+    JSON.stringify({
+      examType,
+      examDate,
+      studyHours,
+      fullPlan,
+    })
+  );
 }
 
 function getFounderMode() {
@@ -192,6 +290,50 @@ function countPlanTasks(item) {
   return sectionTasks || item.tasks.length;
 }
 
+function getTaskOwnerTitle(item) {
+  return item.storageTitle || item.title || "Study Day";
+}
+
+function getRenderableSections(item) {
+  if (Array.isArray(item.sections) && item.sections.length > 0) {
+    return item.sections;
+  }
+
+  if (Array.isArray(item.tasks) && item.tasks.length > 0) {
+    return [
+      {
+        title: "Tasks",
+        tasks: item.tasks,
+      },
+    ];
+  }
+
+  return [];
+}
+
+function buildTaskId(planKey, itemTitle, sectionTitle, task) {
+  return hashString([planKey, itemTitle, sectionTitle, task].join("::"));
+}
+
+function collectPlanTasks(planItems, planKey) {
+  if (!planKey || !Array.isArray(planItems)) {
+    return [];
+  }
+
+  return planItems.flatMap((item) => {
+    const itemTitle = getTaskOwnerTitle(item);
+
+    return getRenderableSections(item).flatMap((section) =>
+      section.tasks.map((task) => ({
+        id: buildTaskId(planKey, itemTitle, section.title, task),
+        itemTitle,
+        sectionTitle: section.title,
+        task,
+      }))
+    );
+  });
+}
+
 function buildSectionsFromLines(lines) {
   const sections = [];
   let currentSection = null;
@@ -249,6 +391,7 @@ function normalizeTextSection(section, index) {
   return {
     id: `plan-item-${index}`,
     title: looksLikeDayHeading ? firstLine : `Day ${index + 1}`,
+    storageTitle: looksLikeDayHeading ? firstLine : `Day ${index + 1}`,
     summary: taskLines.length ? "" : inlineSummary,
     sections,
     tasks: taskLines.length ? taskLines : looksLikeDayHeading ? [] : lines.map(cleanLine).filter(Boolean),
@@ -300,6 +443,7 @@ function normalizePlanItem(item, index) {
   return {
     id: `plan-item-${index}`,
     title,
+    storageTitle: title,
     summary: tasks.length ? summary : "",
     sections,
     tasks: tasks.length ? tasks : toTaskList(summary),
@@ -365,6 +509,7 @@ function normalizeTodayPlan(rawTodayPlan, fallbackFullPlan) {
     if (parsed[0]) {
       return {
         ...parsed[0],
+        storageTitle: parsed[0].storageTitle || parsed[0].title,
         title: "Today's Plan",
       };
     }
@@ -374,6 +519,7 @@ function normalizeTodayPlan(rawTodayPlan, fallbackFullPlan) {
     return {
       id: "today-plan",
       title: "Today's Plan",
+      storageTitle: fallbackFullPlan[0]?.storageTitle || "Day 1",
       summary: "",
       tasks,
     };
@@ -388,6 +534,7 @@ function normalizeTodayPlan(rawTodayPlan, fallbackFullPlan) {
 
     return {
       ...parsed,
+      storageTitle: parsed.storageTitle || parsed.title,
       title: "Today's Plan",
     };
   }
@@ -432,8 +579,10 @@ async function requestPlan(payload) {
   throw lastError;
 }
 
-function PlanCard({ item, highlight }) {
+function PlanCard({ item, highlight, planKey, progressMap, onToggleTask }) {
   const taskCount = countPlanTasks(item);
+  const itemTitle = getTaskOwnerTitle(item);
+  const renderSections = getRenderableSections(item);
 
   return (
     <div
@@ -457,28 +606,66 @@ function PlanCard({ item, highlight }) {
 
       {item.summary ? <p style={styles.planSummary}>{item.summary}</p> : null}
 
-      {item.sections && item.sections.length > 0 ? (
+      {renderSections.length > 0 ? (
         <div style={styles.sectionStack}>
-          {item.sections.map((section) => (
+          {renderSections.map((section) => (
             <div key={`${item.id}-${section.title}`} style={styles.sectionCard}>
               <p style={styles.sectionTitle}>{section.title}</p>
               <ul style={styles.taskList}>
-                {section.tasks.map((task, index) => (
-                  <li key={`${item.id}-${section.title}-${index}`} style={styles.taskItem}>
-                    {task}
-                  </li>
-                ))}
+                {section.tasks.map((task, index) => {
+                  const taskId = buildTaskId(planKey, itemTitle, section.title, task);
+                  const checked = Boolean(progressMap[taskId]);
+
+                  return (
+                    <li
+                      key={`${item.id}-${section.title}-${index}`}
+                      style={{
+                        ...styles.taskItem,
+                        ...(checked ? styles.taskItemDone : {}),
+                      }}
+                    >
+                      <label style={styles.taskLabel}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => onToggleTask(taskId)}
+                          style={styles.taskCheckbox}
+                        />
+                        <span style={checked ? styles.taskTextDone : undefined}>{task}</span>
+                      </label>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
         </div>
       ) : item.tasks.length > 0 ? (
         <ul style={styles.taskList}>
-          {item.tasks.map((task, index) => (
-            <li key={`${item.id}-task-${index}`} style={styles.taskItem}>
-              {task}
-            </li>
-          ))}
+          {item.tasks.map((task, index) => {
+            const taskId = buildTaskId(planKey, itemTitle, "Tasks", task);
+            const checked = Boolean(progressMap[taskId]);
+
+            return (
+              <li
+                key={`${item.id}-task-${index}`}
+                style={{
+                  ...styles.taskItem,
+                  ...(checked ? styles.taskItemDone : {}),
+                }}
+              >
+                <label style={styles.taskLabel}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggleTask(taskId)}
+                    style={styles.taskCheckbox}
+                  />
+                  <span style={checked ? styles.taskTextDone : undefined}>{task}</span>
+                </label>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p style={styles.emptyCopy}>No tasks were returned for this section.</p>
@@ -488,23 +675,32 @@ function PlanCard({ item, highlight }) {
 }
 
 export default function App() {
+  const savedSession = loadStoredPlanSession();
   const resultRef = useRef(null);
-  const [formData, setFormData] = useState({
-    examType: "JEE",
-    syllabus: "",
-    examDate: "",
-    studyHours: "5",
-  });
+  const [formData, setFormData] = useState(
+    savedSession?.formData || {
+      examType: "JEE",
+      syllabus: "",
+      examDate: "",
+      studyHours: "5",
+    }
+  );
   const [viewMode, setViewMode] = useState("today");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [founderMode] = useState(getFounderMode);
   const [planUsageCount, setPlanUsageCount] = useState(getStoredPlanUsageCount);
-  const [result, setResult] = useState({
-    fullPlan: [],
-    todayPlan: null,
-    daysLeft: null,
-  });
+  const [result, setResult] = useState(
+    savedSession?.result || {
+      fullPlan: [],
+      todayPlan: null,
+      daysLeft: null,
+      planKey: "",
+    }
+  );
+  const [progressMap, setProgressMap] = useState(
+    loadStoredProgress(savedSession?.result?.planKey || "")
+  );
 
   const previewPlan = result.fullPlan.slice(0, FREE_PREVIEW_DAYS);
   const hiddenDayCount = Math.max(result.fullPlan.length - FREE_PREVIEW_DAYS, 0);
@@ -513,6 +709,18 @@ export default function App() {
   const freeFullPlansLeft = Math.max(FREE_FULL_PLAN_LIMIT - planUsageCount, 0);
   const hasFullPlanAccess =
     founderMode || (planUsageCount > 0 && planUsageCount <= FREE_FULL_PLAN_LIMIT);
+  const trackablePlanItems = hasFullPlanAccess ? result.fullPlan : previewPlan;
+  const allPlanTasks = collectPlanTasks(trackablePlanItems, result.planKey);
+  const completedTaskCount = allPlanTasks.filter((task) => progressMap[task.id]).length;
+  const totalTaskCount = allPlanTasks.length;
+  const progressPercent = totalTaskCount
+    ? Math.round((completedTaskCount / totalTaskCount) * 100)
+    : 0;
+  const pendingTasks = allPlanTasks.filter((task) => !progressMap[task.id]);
+
+  useEffect(() => {
+    setProgressMap(loadStoredProgress(result.planKey));
+  }, [result.planKey]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -558,13 +766,31 @@ export default function App() {
       }
 
       const nextUsageCount = planUsageCount + 1;
-      setPlanUsageCount(nextUsageCount);
-      storePlanUsageCount(nextUsageCount);
-
-      setResult({
+      const normalizedFormData = {
+        ...formData,
+        syllabus,
+        studyHours: String(studyHours),
+      };
+      const planKey = buildPlanKey({
+        examType: normalizedFormData.examType,
+        examDate: normalizedFormData.examDate,
+        studyHours: normalizedFormData.studyHours,
+        fullPlan,
+      });
+      const nextResult = {
         fullPlan,
         todayPlan: todayPlanData,
         daysLeft: typeof data.daysLeft === "number" ? data.daysLeft : null,
+        planKey,
+      };
+
+      setPlanUsageCount(nextUsageCount);
+      storePlanUsageCount(nextUsageCount);
+      setFormData(normalizedFormData);
+      setResult(nextResult);
+      storePlanSession({
+        formData: normalizedFormData,
+        result: nextResult,
       });
       setViewMode("today");
 
@@ -596,9 +822,24 @@ export default function App() {
       fullPlan: [],
       todayPlan: null,
       daysLeft: null,
+      planKey: "",
     });
+    setProgressMap({});
+    clearStoredPlanSession();
     setViewMode("today");
     setError("");
+  }
+
+  function handleToggleTask(taskId) {
+    setProgressMap((current) => {
+      const next = {
+        ...current,
+        [taskId]: !current[taskId],
+      };
+
+      storeProgress(result.planKey, next);
+      return next;
+    });
   }
 
   return (
@@ -764,9 +1005,40 @@ export default function App() {
               </div>
             </div>
 
+            <div style={styles.progressCard}>
+              <div style={styles.progressHeader}>
+                <div>
+                  <p style={styles.progressEyebrow}>Daily Execution</p>
+                  <h3 style={styles.progressTitle}>
+                    {completedTaskCount} / {totalTaskCount} tasks completed
+                  </h3>
+                </div>
+                <strong style={styles.progressPercent}>{progressPercent}%</strong>
+              </div>
+              <div style={styles.progressTrack}>
+                <div
+                  style={{
+                    ...styles.progressFill,
+                    width: `${progressPercent}%`,
+                  }}
+                />
+              </div>
+              <p style={styles.progressMeta}>
+                {pendingTasks.length > 0
+                  ? `${pendingTasks.length} tasks are still pending.`
+                  : "All tasks are completed for this plan."}
+              </p>
+            </div>
+
             {viewMode === "today" ? (
               todayPlan ? (
-                <PlanCard item={todayPlan} highlight />
+                <PlanCard
+                  item={todayPlan}
+                  highlight
+                  planKey={result.planKey}
+                  progressMap={progressMap}
+                  onToggleTask={handleToggleTask}
+                />
               ) : (
                 <p style={styles.emptyCopy}>Today&apos;s plan is not available yet.</p>
               )
@@ -788,7 +1060,13 @@ export default function App() {
 
                     <div style={styles.planStack}>
                       {result.fullPlan.map((item) => (
-                        <PlanCard key={item.id} item={item} />
+                        <PlanCard
+                          key={item.id}
+                          item={item}
+                          planKey={result.planKey}
+                          progressMap={progressMap}
+                          onToggleTask={handleToggleTask}
+                        />
                       ))}
                     </div>
                   </>
@@ -804,7 +1082,13 @@ export default function App() {
 
                     <div style={styles.planStack}>
                       {previewPlan.map((item) => (
-                        <PlanCard key={item.id} item={item} />
+                        <PlanCard
+                          key={item.id}
+                          item={item}
+                          planKey={result.planKey}
+                          progressMap={progressMap}
+                          onToggleTask={handleToggleTask}
+                        />
                       ))}
                     </div>
 
@@ -851,6 +1135,27 @@ export default function App() {
                 )}
               </>
             )}
+
+            {pendingTasks.length > 0 ? (
+              <div style={styles.pendingCard}>
+                <div style={styles.pendingHeader}>
+                  <div>
+                    <p style={styles.pendingEyebrow}>Pending Tasks</p>
+                    <h3 style={styles.pendingTitle}>What is still left</h3>
+                  </div>
+                  <span style={styles.pendingCount}>{pendingTasks.length} pending</span>
+                </div>
+                <div style={styles.pendingList}>
+                  {pendingTasks.slice(0, 8).map((task) => (
+                    <div key={task.id} style={styles.pendingItem}>
+                      <p style={styles.pendingItemDay}>{task.itemTitle}</p>
+                      <p style={styles.pendingItemSection}>{task.sectionTitle}</p>
+                      <p style={styles.pendingItemTask}>{task.task}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </section>
         ) : null}
       </main>
@@ -1126,6 +1431,55 @@ const styles = {
     color: "#94a3b8",
     fontSize: "0.92rem",
   },
+  progressCard: {
+    marginBottom: "18px",
+    padding: "18px",
+    borderRadius: "20px",
+    background: "rgba(15, 23, 42, 0.78)",
+    border: "1px solid rgba(94, 234, 212, 0.12)",
+  },
+  progressHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  progressEyebrow: {
+    margin: 0,
+    color: "#5eead4",
+    fontSize: "0.76rem",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  progressTitle: {
+    margin: "8px 0 0",
+    fontSize: "1.12rem",
+    lineHeight: 1.3,
+  },
+  progressPercent: {
+    fontSize: "1.5rem",
+    color: "#99f6e4",
+  },
+  progressTrack: {
+    width: "100%",
+    height: "12px",
+    borderRadius: "999px",
+    background: "rgba(148, 163, 184, 0.14)",
+    overflow: "hidden",
+    marginTop: "14px",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: "999px",
+    background: "linear-gradient(135deg, #14b8a6 0%, #22c55e 100%)",
+    transition: "width 180ms ease",
+  },
+  progressMeta: {
+    margin: "12px 0 0",
+    color: "#cbd5e1",
+    lineHeight: 1.6,
+  },
   planStack: {
     display: "grid",
     gap: "16px",
@@ -1194,8 +1548,28 @@ const styles = {
     display: "grid",
     gap: "10px",
   },
+  taskLabel: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "10px",
+    cursor: "pointer",
+  },
+  taskCheckbox: {
+    width: "16px",
+    height: "16px",
+    marginTop: "4px",
+    accentColor: "#14b8a6",
+    flexShrink: 0,
+  },
   taskItem: {
     lineHeight: 1.55,
+  },
+  taskItemDone: {
+    color: "#94a3b8",
+  },
+  taskTextDone: {
+    textDecoration: "line-through",
+    opacity: 0.75,
   },
   emptyCopy: {
     margin: 0,
@@ -1291,5 +1665,66 @@ const styles = {
     color: "#f8fafc",
     fontWeight: 700,
     textDecoration: "none",
+  },
+  pendingCard: {
+    marginTop: "18px",
+    padding: "20px",
+    borderRadius: "20px",
+    background: "rgba(15, 23, 42, 0.78)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+  },
+  pendingHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+    marginBottom: "14px",
+  },
+  pendingEyebrow: {
+    margin: 0,
+    color: "#fcd34d",
+    fontSize: "0.76rem",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  pendingTitle: {
+    margin: "8px 0 0",
+    fontSize: "1.1rem",
+  },
+  pendingCount: {
+    padding: "8px 12px",
+    borderRadius: "999px",
+    background: "rgba(250, 204, 21, 0.12)",
+    color: "#fde68a",
+    fontSize: "0.82rem",
+    fontWeight: 700,
+  },
+  pendingList: {
+    display: "grid",
+    gap: "12px",
+  },
+  pendingItem: {
+    padding: "14px 16px",
+    borderRadius: "16px",
+    background: "rgba(255, 255, 255, 0.03)",
+    border: "1px solid rgba(255, 255, 255, 0.06)",
+  },
+  pendingItemDay: {
+    margin: 0,
+    color: "#f8fafc",
+    fontWeight: 700,
+  },
+  pendingItemSection: {
+    margin: "6px 0 0",
+    color: "#5eead4",
+    fontSize: "0.84rem",
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+  },
+  pendingItemTask: {
+    margin: "8px 0 0",
+    color: "#cbd5e1",
+    lineHeight: 1.5,
   },
 };
