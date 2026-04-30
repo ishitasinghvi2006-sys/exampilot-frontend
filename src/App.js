@@ -753,7 +753,12 @@ export default function App() {
     : 0;
   const pendingTasks = allPlanTasks.filter((task) => !progressMap[task.id]);
   const pendingDayGroups = buildPendingDayGroups(pendingTasks);
-  const recoveryGroups = pendingDayGroups.slice(0, 2);
+  const recoveryTaskLimit = Math.max(
+    2,
+    Math.min(5, Number(formData.studyHours) || 3)
+  );
+  const priorityRecoveryTasks = pendingTasks.slice(0, recoveryTaskLimit);
+  const isLowTimeMode = typeof result.daysLeft === "number" && result.daysLeft <= 3;
 
   useEffect(() => {
     setProgressMap(loadStoredProgress(result.planKey));
@@ -896,7 +901,6 @@ export default function App() {
         <section style={styles.panel}>
           <div style={styles.panelHeader}>
             <div>
-              <p style={styles.panelEyebrow}>Phase 1 MVP</p>
               <h2 style={styles.panelTitle}>Generate your personalized study plan</h2>
             </div>
           </div>
@@ -1067,45 +1071,34 @@ export default function App() {
               </p>
             </div>
 
-            {pendingDayGroups.length > 0 ? (
+            {priorityRecoveryTasks.length > 0 ? (
               <div style={styles.recoveryCard}>
                 <div style={styles.recoveryHeader}>
                   <div>
                     <p style={styles.recoveryEyebrow}>Recovery Mode</p>
                     <h3 style={styles.recoveryTitle}>
-                      Start with unfinished work before adding more
+                      Do these tasks first today
                     </h3>
                   </div>
-                  <span style={styles.recoveryCount}>{pendingTasks.length} pending</span>
+                  <span style={styles.recoveryCount}>
+                    {priorityRecoveryTasks.length} first priority
+                  </span>
                 </div>
                 <p style={styles.recoveryCopy}>
-                  ExamPilot is now prioritizing unfinished tasks first. Clear these to
-                  stay on track for your exam.
+                  {isLowTimeMode
+                    ? `You only have ${result.daysLeft} day${
+                        result.daysLeft === 1 ? "" : "s"
+                      } left, so finish these high-priority pending tasks before starting anything new.`
+                    : "Start with these unfinished tasks first. After that, continue with the rest of your plan."}
                 </p>
                 <div style={styles.recoveryList}>
-                  {recoveryGroups.map((group) => (
-                    <div key={group.dayTitle} style={styles.recoveryDayCard}>
-                      <div style={styles.recoveryDayHeader}>
-                        <p style={styles.recoveryDayTitle}>{group.dayTitle}</p>
-                        <span style={styles.recoveryDayCount}>{group.taskCount} tasks</span>
+                  {priorityRecoveryTasks.map((task) => (
+                    <div key={task.id} style={styles.recoveryTaskCard}>
+                      <div style={styles.recoveryTaskMeta}>
+                        <span style={styles.recoveryTaskDay}>{task.itemTitle}</span>
+                        <span style={styles.recoveryTaskSection}>{task.sectionTitle}</span>
                       </div>
-                      <div style={styles.recoverySectionList}>
-                        {group.sections.map((section) => (
-                          <div key={`${group.dayTitle}-${section.title}`} style={styles.recoverySection}>
-                            <p style={styles.recoverySectionTitle}>{section.title}</p>
-                            <ul style={styles.recoveryTaskList}>
-                              {section.tasks.slice(0, 2).map((task) => (
-                                <li
-                                  key={`${group.dayTitle}-${section.title}-${task}`}
-                                  style={styles.recoveryTaskItem}
-                                >
-                                  {task}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
+                      <p style={styles.recoveryTaskText}>{task.task}</p>
                     </div>
                   ))}
                 </div>
@@ -1223,7 +1216,7 @@ export default function App() {
                 <div style={styles.pendingHeader}>
                   <div>
                     <p style={styles.pendingEyebrow}>Pending Tasks</p>
-                    <h3 style={styles.pendingTitle}>What is still left</h3>
+                    <h3 style={styles.pendingTitle}>Full pending backlog</h3>
                   </div>
                   <span style={styles.pendingCount}>{pendingTasks.length} pending</span>
                 </div>
@@ -1624,54 +1617,34 @@ const styles = {
     gap: "12px",
     marginTop: "16px",
   },
-  recoveryDayCard: {
+  recoveryTaskCard: {
     padding: "16px",
     borderRadius: "16px",
     background: "rgba(255, 255, 255, 0.03)",
     border: "1px solid rgba(255, 255, 255, 0.06)",
   },
-  recoveryDayHeader: {
+  recoveryTaskMeta: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "12px",
     flexWrap: "wrap",
   },
-  recoveryDayTitle: {
+  recoveryTaskDay: {
     margin: 0,
     color: "#f8fafc",
     fontWeight: 700,
   },
-  recoveryDayCount: {
-    color: "#94a3b8",
-    fontSize: "0.84rem",
-    fontWeight: 700,
-  },
-  recoverySectionList: {
-    display: "grid",
-    gap: "10px",
-    marginTop: "12px",
-  },
-  recoverySection: {
-    display: "grid",
-    gap: "8px",
-  },
-  recoverySectionTitle: {
-    margin: 0,
+  recoveryTaskSection: {
     color: "#5eead4",
     fontSize: "0.84rem",
     fontWeight: 700,
     letterSpacing: "0.06em",
     textTransform: "uppercase",
   },
-  recoveryTaskList: {
-    margin: 0,
-    paddingLeft: "18px",
+  recoveryTaskText: {
+    margin: "10px 0 0",
     color: "#e2e8f0",
-    display: "grid",
-    gap: "8px",
-  },
-  recoveryTaskItem: {
     lineHeight: 1.5,
   },
   planStack: {
