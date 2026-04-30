@@ -334,6 +334,41 @@ function collectPlanTasks(planItems, planKey) {
   });
 }
 
+function extractDaySortValue(label) {
+  const match = String(label || "").match(/day\s*(\d+)/i);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function buildPendingDayGroups(pendingTasks) {
+  const dayMap = new Map();
+
+  pendingTasks.forEach((task) => {
+    const existingDay = dayMap.get(task.itemTitle) || {
+      dayTitle: task.itemTitle,
+      daySortValue: extractDaySortValue(task.itemTitle),
+      sections: new Map(),
+      tasks: [],
+    };
+
+    const existingSection = existingDay.sections.get(task.sectionTitle) || [];
+    existingSection.push(task.task);
+    existingDay.sections.set(task.sectionTitle, uniqueLines(existingSection));
+    existingDay.tasks.push(task);
+    dayMap.set(task.itemTitle, existingDay);
+  });
+
+  return [...dayMap.values()]
+    .sort((a, b) => a.daySortValue - b.daySortValue)
+    .map((day) => ({
+      dayTitle: day.dayTitle,
+      taskCount: day.tasks.length,
+      sections: [...day.sections.entries()].map(([title, tasks]) => ({
+        title,
+        tasks,
+      })),
+    }));
+}
+
 function buildSectionsFromLines(lines) {
   const sections = [];
   let currentSection = null;
@@ -717,6 +752,8 @@ export default function App() {
     ? Math.round((completedTaskCount / totalTaskCount) * 100)
     : 0;
   const pendingTasks = allPlanTasks.filter((task) => !progressMap[task.id]);
+  const pendingDayGroups = buildPendingDayGroups(pendingTasks);
+  const recoveryGroups = pendingDayGroups.slice(0, 2);
 
   useEffect(() => {
     setProgressMap(loadStoredProgress(result.planKey));
@@ -1030,6 +1067,51 @@ export default function App() {
               </p>
             </div>
 
+            {pendingDayGroups.length > 0 ? (
+              <div style={styles.recoveryCard}>
+                <div style={styles.recoveryHeader}>
+                  <div>
+                    <p style={styles.recoveryEyebrow}>Recovery Mode</p>
+                    <h3 style={styles.recoveryTitle}>
+                      Start with unfinished work before adding more
+                    </h3>
+                  </div>
+                  <span style={styles.recoveryCount}>{pendingTasks.length} pending</span>
+                </div>
+                <p style={styles.recoveryCopy}>
+                  ExamPilot is now prioritizing unfinished tasks first. Clear these to
+                  stay on track for your exam.
+                </p>
+                <div style={styles.recoveryList}>
+                  {recoveryGroups.map((group) => (
+                    <div key={group.dayTitle} style={styles.recoveryDayCard}>
+                      <div style={styles.recoveryDayHeader}>
+                        <p style={styles.recoveryDayTitle}>{group.dayTitle}</p>
+                        <span style={styles.recoveryDayCount}>{group.taskCount} tasks</span>
+                      </div>
+                      <div style={styles.recoverySectionList}>
+                        {group.sections.map((section) => (
+                          <div key={`${group.dayTitle}-${section.title}`} style={styles.recoverySection}>
+                            <p style={styles.recoverySectionTitle}>{section.title}</p>
+                            <ul style={styles.recoveryTaskList}>
+                              {section.tasks.slice(0, 2).map((task) => (
+                                <li
+                                  key={`${group.dayTitle}-${section.title}-${task}`}
+                                  style={styles.recoveryTaskItem}
+                                >
+                                  {task}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {viewMode === "today" ? (
               todayPlan ? (
                 <PlanCard
@@ -1146,11 +1228,29 @@ export default function App() {
                   <span style={styles.pendingCount}>{pendingTasks.length} pending</span>
                 </div>
                 <div style={styles.pendingList}>
-                  {pendingTasks.slice(0, 8).map((task) => (
-                    <div key={task.id} style={styles.pendingItem}>
-                      <p style={styles.pendingItemDay}>{task.itemTitle}</p>
-                      <p style={styles.pendingItemSection}>{task.sectionTitle}</p>
-                      <p style={styles.pendingItemTask}>{task.task}</p>
+                  {pendingDayGroups.map((group) => (
+                    <div key={group.dayTitle} style={styles.pendingItem}>
+                      <div style={styles.pendingItemHeader}>
+                        <p style={styles.pendingItemDay}>{group.dayTitle}</p>
+                        <span style={styles.pendingItemCount}>{group.taskCount} tasks</span>
+                      </div>
+                      <div style={styles.pendingSectionList}>
+                        {group.sections.map((section) => (
+                          <div key={`${group.dayTitle}-${section.title}`} style={styles.pendingSection}>
+                            <p style={styles.pendingItemSection}>{section.title}</p>
+                            <ul style={styles.pendingTaskList}>
+                              {section.tasks.map((task) => (
+                                <li
+                                  key={`${group.dayTitle}-${section.title}-${task}`}
+                                  style={styles.pendingTaskBullet}
+                                >
+                                  {task}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1480,6 +1580,100 @@ const styles = {
     color: "#cbd5e1",
     lineHeight: 1.6,
   },
+  recoveryCard: {
+    marginBottom: "18px",
+    padding: "20px",
+    borderRadius: "20px",
+    background: "rgba(25, 35, 58, 0.82)",
+    border: "1px solid rgba(250, 204, 21, 0.18)",
+  },
+  recoveryHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  recoveryEyebrow: {
+    margin: 0,
+    color: "#fcd34d",
+    fontSize: "0.76rem",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  recoveryTitle: {
+    margin: "8px 0 0",
+    fontSize: "1.12rem",
+    lineHeight: 1.3,
+  },
+  recoveryCount: {
+    padding: "8px 12px",
+    borderRadius: "999px",
+    background: "rgba(250, 204, 21, 0.12)",
+    color: "#fde68a",
+    fontSize: "0.82rem",
+    fontWeight: 700,
+  },
+  recoveryCopy: {
+    margin: "12px 0 0",
+    color: "#cbd5e1",
+    lineHeight: 1.6,
+  },
+  recoveryList: {
+    display: "grid",
+    gap: "12px",
+    marginTop: "16px",
+  },
+  recoveryDayCard: {
+    padding: "16px",
+    borderRadius: "16px",
+    background: "rgba(255, 255, 255, 0.03)",
+    border: "1px solid rgba(255, 255, 255, 0.06)",
+  },
+  recoveryDayHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  recoveryDayTitle: {
+    margin: 0,
+    color: "#f8fafc",
+    fontWeight: 700,
+  },
+  recoveryDayCount: {
+    color: "#94a3b8",
+    fontSize: "0.84rem",
+    fontWeight: 700,
+  },
+  recoverySectionList: {
+    display: "grid",
+    gap: "10px",
+    marginTop: "12px",
+  },
+  recoverySection: {
+    display: "grid",
+    gap: "8px",
+  },
+  recoverySectionTitle: {
+    margin: 0,
+    color: "#5eead4",
+    fontSize: "0.84rem",
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+  },
+  recoveryTaskList: {
+    margin: 0,
+    paddingLeft: "18px",
+    color: "#e2e8f0",
+    display: "grid",
+    gap: "8px",
+  },
+  recoveryTaskItem: {
+    lineHeight: 1.5,
+  },
   planStack: {
     display: "grid",
     gap: "16px",
@@ -1710,20 +1904,46 @@ const styles = {
     background: "rgba(255, 255, 255, 0.03)",
     border: "1px solid rgba(255, 255, 255, 0.06)",
   },
+  pendingItemHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
   pendingItemDay: {
     margin: 0,
     color: "#f8fafc",
     fontWeight: 700,
   },
+  pendingItemCount: {
+    color: "#94a3b8",
+    fontSize: "0.84rem",
+    fontWeight: 700,
+  },
+  pendingSectionList: {
+    display: "grid",
+    gap: "10px",
+    marginTop: "12px",
+  },
+  pendingSection: {
+    display: "grid",
+    gap: "8px",
+  },
   pendingItemSection: {
-    margin: "6px 0 0",
+    margin: 0,
     color: "#5eead4",
     fontSize: "0.84rem",
     textTransform: "uppercase",
     letterSpacing: "0.06em",
   },
-  pendingItemTask: {
-    margin: "8px 0 0",
+  pendingTaskList: {
+    margin: 0,
+    paddingLeft: "18px",
+    display: "grid",
+    gap: "8px",
+  },
+  pendingTaskBullet: {
     color: "#cbd5e1",
     lineHeight: 1.5,
   },
