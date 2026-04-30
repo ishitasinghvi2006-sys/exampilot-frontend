@@ -13,6 +13,12 @@ const WHATSAPP_NUMBER = "918160971738";
 const PAYMENT_AMOUNT = "49";
 const UPI_PAYEE_NAME = "ExamPilot";
 const DEFAULT_BACKEND_BASE = "https://lectai-backend.onrender.com";
+const DEFAULT_FORM_DATA = {
+  examType: "JEE",
+  syllabus: "",
+  examDate: "",
+  studyHours: "5",
+};
 
 const SECTION_HEADING_PATTERN =
   /^(Morning(?:\s*\([^)]*\))?|Evening(?:\s*\([^)]*\))?|Must Finish Today|Practice|Revision Check|Key Points|Practice Questions|Memory Tricks|Focus|Why This Day Matters)\s*:?\s*(.*)$/i;
@@ -712,14 +718,7 @@ function PlanCard({ item, highlight, planKey, progressMap, onToggleTask }) {
 export default function App() {
   const savedSession = loadStoredPlanSession();
   const resultRef = useRef(null);
-  const [formData, setFormData] = useState(
-    savedSession?.formData || {
-      examType: "JEE",
-      syllabus: "",
-      examDate: "",
-      studyHours: "5",
-    }
-  );
+  const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
   const [viewMode, setViewMode] = useState("today");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -731,6 +730,7 @@ export default function App() {
       todayPlan: null,
       daysLeft: null,
       planKey: "",
+      meta: null,
     }
   );
   const [progressMap, setProgressMap] = useState(
@@ -741,6 +741,7 @@ export default function App() {
   const hiddenDayCount = Math.max(result.fullPlan.length - FREE_PREVIEW_DAYS, 0);
   const hasPlan = result.fullPlan.length > 0 || Boolean(result.todayPlan);
   const todayPlan = result.todayPlan || result.fullPlan[0] || null;
+  const resultMeta = result.meta || null;
   const freeFullPlansLeft = Math.max(FREE_FULL_PLAN_LIMIT - planUsageCount, 0);
   const hasFullPlanAccess =
     founderMode || (planUsageCount > 0 && planUsageCount <= FREE_FULL_PLAN_LIMIT);
@@ -755,7 +756,7 @@ export default function App() {
   const pendingDayGroups = buildPendingDayGroups(pendingTasks);
   const recoveryTaskLimit = Math.max(
     2,
-    Math.min(5, Number(formData.studyHours) || 3)
+    Math.min(5, Number(resultMeta?.studyHours || formData.studyHours) || 3)
   );
   const priorityRecoveryTasks = pendingTasks.slice(0, recoveryTaskLimit);
   const isLowTimeMode = typeof result.daysLeft === "number" && result.daysLeft <= 3;
@@ -824,6 +825,11 @@ export default function App() {
         todayPlan: todayPlanData,
         daysLeft: typeof data.daysLeft === "number" ? data.daysLeft : null,
         planKey,
+        meta: {
+          examType: normalizedFormData.examType,
+          examDate: normalizedFormData.examDate,
+          studyHours: normalizedFormData.studyHours,
+        },
       };
 
       setPlanUsageCount(nextUsageCount);
@@ -831,7 +837,6 @@ export default function App() {
       setFormData(normalizedFormData);
       setResult(nextResult);
       storePlanSession({
-        formData: normalizedFormData,
         result: nextResult,
       });
       setViewMode("today");
@@ -865,7 +870,9 @@ export default function App() {
       todayPlan: null,
       daysLeft: null,
       planKey: "",
+      meta: null,
     });
+    setFormData(DEFAULT_FORM_DATA);
     setProgressMap({});
     clearStoredPlanSession();
     setViewMode("today");
@@ -1028,11 +1035,15 @@ export default function App() {
             <div style={styles.statsRow}>
               <div style={styles.statCard}>
                 <span style={styles.statLabel}>Exam Type</span>
-                <strong style={styles.statValue}>{formData.examType}</strong>
+                <strong style={styles.statValue}>
+                  {resultMeta?.examType || formData.examType}
+                </strong>
               </div>
               <div style={styles.statCard}>
                 <span style={styles.statLabel}>Study Hours</span>
-                <strong style={styles.statValue}>{formData.studyHours}/day</strong>
+                <strong style={styles.statValue}>
+                  {resultMeta?.studyHours || formData.studyHours}/day
+                </strong>
               </div>
               <div style={styles.statCard}>
                 <span style={styles.statLabel}>Days Left</span>
