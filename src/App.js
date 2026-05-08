@@ -5,6 +5,7 @@ const FREE_FULL_PLAN_LIMIT = 3;
 const PLAN_USAGE_STORAGE_KEY = "exampilot-full-plan-usage-count";
 const PLAN_SESSION_STORAGE_KEY = "exampilot-current-plan-session";
 const PLAN_PROGRESS_STORAGE_PREFIX = "exampilot-plan-progress";
+const DAILY_CHECKIN_STORAGE_KEY = "exampilot-daily-checkin";
 const FOUNDER_MODE_STORAGE_KEY = "exampilot-founder-mode";
 const FOUNDER_MODE_QUERY_KEY = "pilot";
 const FOUNDER_MODE_QUERY_VALUE = "founder";
@@ -151,6 +152,68 @@ function storeProgress(planKey, progressMap) {
     getProgressStorageKey(planKey),
     JSON.stringify(progressMap)
   );
+}
+
+function getISTDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return `${year}-${month}-${day}`;
+}
+
+function getYesterdayISTDateKey() {
+  return getISTDateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
+}
+
+function loadDailyCheckIn() {
+  if (typeof window === "undefined") {
+    return {
+      streakCount: 0,
+      lastCheckInDate: "",
+    };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(DAILY_CHECKIN_STORAGE_KEY);
+
+    if (!rawValue) {
+      return {
+        streakCount: 0,
+        lastCheckInDate: "",
+      };
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+
+    return {
+      streakCount:
+        Number.isFinite(Number(parsedValue?.streakCount)) && Number(parsedValue?.streakCount) > 0
+          ? Number(parsedValue.streakCount)
+          : 0,
+      lastCheckInDate: String(parsedValue?.lastCheckInDate || ""),
+    };
+  } catch (error) {
+    return {
+      streakCount: 0,
+      lastCheckInDate: "",
+    };
+  }
+}
+
+function storeDailyCheckIn(value) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(DAILY_CHECKIN_STORAGE_KEY, JSON.stringify(value));
 }
 
 function buildPlanKey({ examType, examDate, studyHours, fullPlan }) {
@@ -724,6 +787,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [founderMode] = useState(getFounderMode);
   const [planUsageCount, setPlanUsageCount] = useState(getStoredPlanUsageCount);
+  const [dailyCheckIn, setDailyCheckIn] = useState(loadDailyCheckIn);
   const [result, setResult] = useState(
     savedSession?.result || {
       fullPlan: [],
@@ -760,6 +824,22 @@ export default function App() {
   );
   const priorityRecoveryTasks = pendingTasks.slice(0, recoveryTaskLimit);
   const isLowTimeMode = typeof result.daysLeft === "number" && result.daysLeft <= 3;
+  const todayPlanTasks = todayPlan ? collectPlanTasks([todayPlan], result.planKey) : [];
+  const completedTodayTaskCount = todayPlanTasks.filter((task) => progressMap[task.id]).length;
+  const totalTodayTaskCount = todayPlanTasks.length;
+  const pendingTodayTaskCount = Math.max(totalTodayTaskCount - completedTodayTaskCount, 0);
+  const todayDateKey = getISTDateKey();
+  const yesterdayDateKey = getYesterdayISTDateKey();
+  const hasCheckedInToday = dailyCheckIn.lastCheckInDate === todayDateKey;
+  const streakCount =
+    dailyCheckIn.lastCheckInDate === todayDateKey ||
+    dailyCheckIn.lastCheckInDate === yesterdayDateKey
+      ? dailyCheckIn.streakCount
+      : 0;
+  const canMarkTodayDone =
+    totalTodayTaskCount > 0 &&
+    completedTodayTaskCount === totalTodayTaskCount &&
+    !hasCheckedInToday;
 
   useEffect(() => {
     setProgressMap(loadStoredProgress(result.planKey));
@@ -889,6 +969,21 @@ export default function App() {
       storeProgress(result.planKey, next);
       return next;
     });
+  }
+
+  function handleDailyCheckIn() {
+    if (!canMarkTodayDone) {
+      return;
+    }
+
+    const nextValue = {
+      streakCount:
+        dailyCheckIn.lastCheckInDate === yesterdayDateKey ? dailyCheckIn.streakCount + 1 : 1,
+      lastCheckInDate: todayDateKey,
+    };
+
+    setDailyCheckIn(nextValue);
+    storeDailyCheckIn(nextValue);
   }
 
   return (
@@ -1055,6 +1150,62 @@ export default function App() {
                 <span style={styles.statLabel}>Free Full Plans Left</span>
                 <strong style={styles.statValue}>{freeFullPlansLeft}</strong>
               </div>
+            </div>
+
+            <div style={styles.accountabilityCard}>
+              <div style={styles.accountabilityHeader}>
+                <div>
+                  <p style={styles.accountabilityEyebrow}>Daily Accountability</p>
+                  <h3 style={styles.accountabilityTitle}>
+                    Build the habit, not just the plan
+                  </h3>
+                </div>
+                <div style={styles.streakBadge}>
+                  <span style={styles.streakValue}>{streakCount}</span>
+                  <span style={styles.streakLabel}>day streak</span>
+                </div>
+              </div>
+
+              <div style={styles.accountabilityGrid}>
+                <div style={styles.accountabilityMetric}>
+                  <span style={styles.accountabilityMetricLabel}>Today&apos;s Plan</span>
+                  <strong style={styles.accountabilityMetricValue}>
+                    {completedTodayTaskCount} / {totalTodayTaskCount} tasks done
+                  </strong>
+                </div>
+                <div style={styles.accountabilityMetric}>
+                  <span style={styles.accountabilityMetricLabel}>Check-in Status</span>
+                  <strong style={styles.accountabilityMetricValue}>
+                    {hasCheckedInToday ? "Checked in today" : "Pending today"}
+                  </strong>
+                </div>
+              </div>
+
+              <p style={styles.accountabilityCopy}>
+                {hasCheckedInToday
+                  ? "You already marked today done. Come back tomorrow and keep the streak alive."
+                  : canMarkTodayDone
+                  ? "Today's tasks are complete. Mark the day done now to keep your streak going."
+                  : `Finish ${pendingTodayTaskCount} more ${
+                      pendingTodayTaskCount === 1 ? "task" : "tasks"
+                    } from Today's Plan before marking the day done.`}
+              </p>
+
+              <button
+                type="button"
+                onClick={handleDailyCheckIn}
+                disabled={!canMarkTodayDone}
+                style={{
+                  ...styles.accountabilityButton,
+                  ...(!canMarkTodayDone ? styles.accountabilityButtonDisabled : {}),
+                }}
+              >
+                {hasCheckedInToday
+                  ? "Checked in today"
+                  : canMarkTodayDone
+                  ? "Mark today done"
+                  : "Finish today's tasks first"}
+              </button>
             </div>
 
             <div style={styles.progressCard}>
@@ -1541,6 +1692,103 @@ const styles = {
     borderRadius: "20px",
     background: "rgba(15, 23, 42, 0.78)",
     border: "1px solid rgba(94, 234, 212, 0.12)",
+  },
+  accountabilityCard: {
+    marginBottom: "18px",
+    padding: "20px",
+    borderRadius: "20px",
+    background:
+      "linear-gradient(135deg, rgba(18, 28, 48, 0.92) 0%, rgba(11, 18, 32, 0.9) 100%)",
+    border: "1px solid rgba(96, 165, 250, 0.18)",
+  },
+  accountabilityHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "16px",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+  accountabilityEyebrow: {
+    margin: 0,
+    color: "#93c5fd",
+    fontSize: "0.76rem",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  accountabilityTitle: {
+    margin: "8px 0 0",
+    fontSize: "1.2rem",
+    lineHeight: 1.3,
+  },
+  streakBadge: {
+    minWidth: "124px",
+    padding: "12px 16px",
+    borderRadius: "18px",
+    background: "rgba(59, 130, 246, 0.12)",
+    border: "1px solid rgba(96, 165, 250, 0.16)",
+    display: "grid",
+    justifyItems: "center",
+    gap: "2px",
+  },
+  streakValue: {
+    fontSize: "1.7rem",
+    fontWeight: 800,
+    color: "#dbeafe",
+    lineHeight: 1,
+  },
+  streakLabel: {
+    color: "#93c5fd",
+    fontSize: "0.8rem",
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  },
+  accountabilityGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "12px",
+    marginBottom: "14px",
+  },
+  accountabilityMetric: {
+    padding: "14px 16px",
+    borderRadius: "16px",
+    background: "rgba(255, 255, 255, 0.03)",
+    border: "1px solid rgba(255, 255, 255, 0.06)",
+    display: "grid",
+    gap: "6px",
+  },
+  accountabilityMetricLabel: {
+    color: "#94a3b8",
+    fontSize: "0.84rem",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  },
+  accountabilityMetricValue: {
+    color: "#f8fafc",
+    fontSize: "1.02rem",
+    lineHeight: 1.4,
+  },
+  accountabilityCopy: {
+    margin: "0 0 14px",
+    color: "#cbd5e1",
+    lineHeight: 1.65,
+  },
+  accountabilityButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "12px 18px",
+    borderRadius: "14px",
+    border: "none",
+    background: "linear-gradient(135deg, #22c55e 0%, #15803d 100%)",
+    color: "#f8fafc",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  accountabilityButtonDisabled: {
+    opacity: 0.55,
+    cursor: "not-allowed",
   },
   progressHeader: {
     display: "flex",
