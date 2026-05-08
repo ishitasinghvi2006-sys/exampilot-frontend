@@ -20,6 +20,13 @@ const DEFAULT_FORM_DATA = {
   examDate: "",
   studyHours: "5",
 };
+const EMPTY_RESULT = {
+  fullPlan: [],
+  todayPlan: null,
+  daysLeft: null,
+  planKey: "",
+  meta: null,
+};
 
 const SECTION_HEADING_PATTERN =
   /^(Morning(?:\s*\([^)]*\))?|Evening(?:\s*\([^)]*\))?|Must Finish Today|Practice|Revision Check|Key Points|Practice Questions|Memory Tricks|Focus|Why This Day Matters)\s*:?\s*(.*)$/i;
@@ -788,22 +795,14 @@ export default function App() {
   const [founderMode] = useState(getFounderMode);
   const [planUsageCount, setPlanUsageCount] = useState(getStoredPlanUsageCount);
   const [dailyCheckIn, setDailyCheckIn] = useState(loadDailyCheckIn);
-  const [result, setResult] = useState(
-    savedSession?.result || {
-      fullPlan: [],
-      todayPlan: null,
-      daysLeft: null,
-      planKey: "",
-      meta: null,
-    }
-  );
-  const [progressMap, setProgressMap] = useState(
-    loadStoredProgress(savedSession?.result?.planKey || "")
-  );
+  const [resumeSession, setResumeSession] = useState(savedSession);
+  const [result, setResult] = useState(EMPTY_RESULT);
+  const [progressMap, setProgressMap] = useState(loadStoredProgress(""));
 
   const previewPlan = result.fullPlan.slice(0, FREE_PREVIEW_DAYS);
   const hiddenDayCount = Math.max(result.fullPlan.length - FREE_PREVIEW_DAYS, 0);
   const hasPlan = result.fullPlan.length > 0 || Boolean(result.todayPlan);
+  const hasResumeSession = Boolean(resumeSession?.result?.planKey) && !hasPlan;
   const todayPlan = result.todayPlan || result.fullPlan[0] || null;
   const resultMeta = result.meta || null;
   const freeFullPlansLeft = Math.max(FREE_FULL_PLAN_LIMIT - planUsageCount, 0);
@@ -916,9 +915,11 @@ export default function App() {
       storePlanUsageCount(nextUsageCount);
       setFormData(normalizedFormData);
       setResult(nextResult);
-      storePlanSession({
+      const nextSession = {
         result: nextResult,
-      });
+      };
+      setResumeSession(nextSession);
+      storePlanSession(nextSession);
       setViewMode("today");
 
       setTimeout(() => {
@@ -945,16 +946,35 @@ export default function App() {
   }
 
   function handleReset() {
-    setResult({
-      fullPlan: [],
-      todayPlan: null,
-      daysLeft: null,
-      planKey: "",
-      meta: null,
-    });
+    setResult(EMPTY_RESULT);
     setFormData(DEFAULT_FORM_DATA);
     setProgressMap({});
+    setResumeSession(null);
     clearStoredPlanSession();
+    setViewMode("today");
+    setError("");
+  }
+
+  function handleResumeLastPlan() {
+    if (!resumeSession?.result) {
+      return;
+    }
+
+    setResult(resumeSession.result);
+    setProgressMap(loadStoredProgress(resumeSession.result.planKey));
+    setViewMode("today");
+
+    setTimeout(() => {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+  }
+
+  function handleStartFresh() {
+    setResumeSession(null);
+    clearStoredPlanSession();
+    setResult(EMPTY_RESULT);
+    setFormData(DEFAULT_FORM_DATA);
+    setProgressMap({});
     setViewMode("today");
     setError("");
   }
@@ -1091,6 +1111,36 @@ export default function App() {
               </p>
             ) : null}
           </form>
+
+          {hasResumeSession ? (
+            <div style={styles.resumeCard}>
+              <div>
+                <p style={styles.resumeEyebrow}>Saved Browser Session</p>
+                <h3 style={styles.resumeTitle}>A previous study plan is available</h3>
+                <p style={styles.resumeCopy}>
+                  This browser has an older saved plan. Students will now see a clean
+                  form first. Resume the older plan only if you want to continue your
+                  own earlier work.
+                </p>
+              </div>
+              <div style={styles.resumeActions}>
+                <button
+                  type="button"
+                  onClick={handleResumeLastPlan}
+                  style={styles.resumePrimaryButton}
+                >
+                  Resume last plan
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartFresh}
+                  style={styles.resumeSecondaryButton}
+                >
+                  Start fresh
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {error ? <div style={styles.errorBox}>{error}</div> : null}
         </section>
@@ -1603,6 +1653,61 @@ const styles = {
     color: "#fde68a",
     fontSize: "0.88rem",
     lineHeight: 1.6,
+  },
+  resumeCard: {
+    marginTop: "18px",
+    padding: "18px",
+    borderRadius: "18px",
+    background: "rgba(15, 23, 42, 0.78)",
+    border: "1px solid rgba(96, 165, 250, 0.16)",
+    display: "grid",
+    gap: "14px",
+  },
+  resumeEyebrow: {
+    margin: 0,
+    color: "#93c5fd",
+    fontSize: "0.76rem",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  resumeTitle: {
+    margin: "8px 0 8px",
+    fontSize: "1.08rem",
+    lineHeight: 1.35,
+  },
+  resumeCopy: {
+    margin: 0,
+    color: "#cbd5e1",
+    lineHeight: 1.65,
+  },
+  resumeActions: {
+    display: "flex",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  resumePrimaryButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "11px 16px",
+    borderRadius: "14px",
+    border: "none",
+    background: "linear-gradient(135deg, #22c55e 0%, #15803d 100%)",
+    color: "#f8fafc",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  resumeSecondaryButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "11px 16px",
+    borderRadius: "14px",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    background: "rgba(255, 255, 255, 0.03)",
+    color: "#f8fafc",
+    fontWeight: 700,
+    cursor: "pointer",
   },
   errorBox: {
     marginTop: "16px",
