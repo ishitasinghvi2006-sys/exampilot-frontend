@@ -20,6 +20,18 @@ const DEFAULT_FORM_DATA = {
   examDate: "",
   studyHours: "5",
 };
+const STREAK_REWARD_MILESTONES = [
+  {
+    days: 7,
+    title: "Consistency Reward",
+    description: "Reach a 7-day streak and prove you can study every day for one full week.",
+  },
+  {
+    days: 30,
+    title: "Discipline Reward",
+    description: "Reach a 30-day streak and build a true long-term study habit.",
+  },
+];
 const EMPTY_RESULT = {
   fullPlan: [],
   todayPlan: null,
@@ -835,6 +847,14 @@ export default function App() {
     dailyCheckIn.lastCheckInDate === yesterdayDateKey
       ? dailyCheckIn.streakCount
       : 0;
+  const unlockedRewardCount = STREAK_REWARD_MILESTONES.filter(
+    (milestone) => streakCount >= milestone.days
+  ).length;
+  const nextRewardMilestone =
+    STREAK_REWARD_MILESTONES.find((milestone) => streakCount < milestone.days) || null;
+  const rewardProgressPercent = nextRewardMilestone
+    ? Math.min(100, Math.round((streakCount / nextRewardMilestone.days) * 100))
+    : 100;
   const canMarkTodayDone =
     totalTodayTaskCount > 0 &&
     completedTodayTaskCount === totalTodayTaskCount &&
@@ -1256,6 +1276,69 @@ export default function App() {
                   ? "Mark today done"
                   : "Finish today's tasks first"}
               </button>
+
+              <div style={styles.rewardsCard}>
+                <div style={styles.rewardsHeader}>
+                  <div>
+                    <p style={styles.rewardsEyebrow}>Streak Rewards</p>
+                    <h4 style={styles.rewardsTitle}>
+                      {nextRewardMilestone
+                        ? `${nextRewardMilestone.days - streakCount} more day${
+                            nextRewardMilestone.days - streakCount === 1 ? "" : "s"
+                          } to your next reward`
+                        : "All current streak rewards unlocked"}
+                    </h4>
+                  </div>
+                  <span style={styles.rewardsCount}>
+                    {unlockedRewardCount}/{STREAK_REWARD_MILESTONES.length} unlocked
+                  </span>
+                </div>
+
+                <p style={styles.rewardsCopy}>
+                  {nextRewardMilestone
+                    ? `Stay consistent and keep checking in daily. Your next unlock is the ${nextRewardMilestone.days}-day ${nextRewardMilestone.title}.`
+                    : "You unlocked every current reward. Next we can add stronger milestone perks and streak bonuses."}
+                </p>
+
+                <div style={styles.rewardProgressTrack}>
+                  <div
+                    style={{
+                      ...styles.rewardProgressFill,
+                      width: `${rewardProgressPercent}%`,
+                    }}
+                  />
+                </div>
+
+                <div style={styles.rewardMilestoneGrid}>
+                  {STREAK_REWARD_MILESTONES.map((milestone) => {
+                    const unlocked = streakCount >= milestone.days;
+
+                    return (
+                      <div
+                        key={milestone.days}
+                        style={{
+                          ...styles.rewardMilestoneCard,
+                          ...(unlocked ? styles.rewardMilestoneCardUnlocked : {}),
+                        }}
+                      >
+                        <div style={styles.rewardMilestoneTop}>
+                          <span style={styles.rewardMilestoneDays}>{milestone.days} days</span>
+                          <span
+                            style={{
+                              ...styles.rewardMilestoneStatus,
+                              ...(unlocked ? styles.rewardMilestoneStatusUnlocked : {}),
+                            }}
+                          >
+                            {unlocked ? "Unlocked" : "Locked"}
+                          </span>
+                        </div>
+                        <h5 style={styles.rewardMilestoneTitle}>{milestone.title}</h5>
+                        <p style={styles.rewardMilestoneCopy}>{milestone.description}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div style={styles.progressCard}>
@@ -1894,6 +1977,113 @@ const styles = {
   accountabilityButtonDisabled: {
     opacity: 0.55,
     cursor: "not-allowed",
+  },
+  rewardsCard: {
+    marginTop: "18px",
+    padding: "18px",
+    borderRadius: "18px",
+    background: "rgba(255, 255, 255, 0.03)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    display: "grid",
+    gap: "14px",
+  },
+  rewardsHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  rewardsEyebrow: {
+    margin: 0,
+    color: "#fcd34d",
+    fontSize: "0.76rem",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  rewardsTitle: {
+    margin: "8px 0 0",
+    fontSize: "1.05rem",
+    lineHeight: 1.4,
+  },
+  rewardsCount: {
+    padding: "8px 12px",
+    borderRadius: "999px",
+    background: "rgba(250, 204, 21, 0.12)",
+    color: "#fde68a",
+    fontSize: "0.82rem",
+    fontWeight: 700,
+  },
+  rewardsCopy: {
+    margin: 0,
+    color: "#cbd5e1",
+    lineHeight: 1.65,
+  },
+  rewardProgressTrack: {
+    width: "100%",
+    height: "10px",
+    borderRadius: "999px",
+    background: "rgba(255, 255, 255, 0.08)",
+    overflow: "hidden",
+  },
+  rewardProgressFill: {
+    height: "100%",
+    borderRadius: "999px",
+    background: "linear-gradient(90deg, #f59e0b 0%, #facc15 100%)",
+  },
+  rewardMilestoneGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "12px",
+  },
+  rewardMilestoneCard: {
+    padding: "14px 16px",
+    borderRadius: "16px",
+    background: "rgba(15, 23, 42, 0.78)",
+    border: "1px solid rgba(255, 255, 255, 0.06)",
+    display: "grid",
+    gap: "8px",
+  },
+  rewardMilestoneCardUnlocked: {
+    border: "1px solid rgba(74, 222, 128, 0.28)",
+    boxShadow: "0 16px 36px rgba(22, 163, 74, 0.12)",
+  },
+  rewardMilestoneTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  rewardMilestoneDays: {
+    color: "#f8fafc",
+    fontWeight: 800,
+    fontSize: "0.98rem",
+  },
+  rewardMilestoneStatus: {
+    padding: "6px 10px",
+    borderRadius: "999px",
+    background: "rgba(148, 163, 184, 0.12)",
+    color: "#cbd5e1",
+    fontSize: "0.76rem",
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  },
+  rewardMilestoneStatusUnlocked: {
+    background: "rgba(74, 222, 128, 0.12)",
+    color: "#86efac",
+  },
+  rewardMilestoneTitle: {
+    margin: 0,
+    fontSize: "1rem",
+    lineHeight: 1.35,
+  },
+  rewardMilestoneCopy: {
+    margin: 0,
+    color: "#94a3b8",
+    lineHeight: 1.55,
+    fontSize: "0.92rem",
   },
   progressHeader: {
     display: "flex",
