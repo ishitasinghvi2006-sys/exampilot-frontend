@@ -45,6 +45,7 @@ const EMPTY_REFLECTION = {
   hardestPart: "",
   practiceCount: "",
   supportNeed: "",
+  otherIssue: "",
 };
 const HARDEST_PART_OPTIONS = [
   { value: "concepts", label: "Concepts were unclear" },
@@ -119,6 +120,85 @@ function buildQrImageUrl() {
   return `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
     buildUpiPaymentLink()
   )}`;
+}
+
+function buildAdaptiveGuidance(confidence, reflection) {
+  if (confidence === 5) {
+    return {
+      title: "Go forward",
+      body: "You rated yourself very strong today. Move to the next day, but still keep the revision check in your routine.",
+      action: "Continue with tomorrow's plan and keep one short revision pass later.",
+    };
+  }
+
+  if (
+    reflection.supportNeed === "examples" &&
+    (reflection.hardestPart === "application" ||
+      reflection.practiceCount === "0" ||
+      reflection.practiceCount === "1-3")
+  ) {
+    return {
+      title: "Use worked examples before fresh questions",
+      body: "You likely need guided examples, not just more reading. Build pattern recognition first, then retry similar questions on your own.",
+      action: "Tomorrow: 2 solved examples + 3 similar practice questions before moving ahead.",
+    };
+  }
+
+  if (reflection.supportNeed === "carryforward") {
+    return {
+      title: "Carry this forward before new topics",
+      body: "Do not move to fresh syllabus immediately. This topic needs one more focused block first so the backlog does not get deeper.",
+      action: "Tomorrow: finish this weak topic first, then continue the main plan.",
+    };
+  }
+
+  if (reflection.hardestPart === "speed") {
+    return {
+      title: "Reduce load and use timed recovery",
+      body: "The understanding may be okay, but speed and time management are hurting completion and confidence.",
+      action: "Tomorrow: carry one high-priority task first, then do one 20-minute timed round.",
+    };
+  }
+
+  if (
+    reflection.hardestPart === "application" ||
+    reflection.practiceCount === "0" ||
+    reflection.practiceCount === "1-3"
+  ) {
+    return {
+      title: "Add guided practice next",
+      body: "The problem looks more like applying the topic than just reading it. You need practice repetition before moving ahead.",
+      action: "Tomorrow: 3 solved examples + 5 focused practice questions on this topic first.",
+    };
+  }
+
+  if (
+    reflection.hardestPart === "memory" ||
+    reflection.supportNeed === "revision"
+  ) {
+    return {
+      title: "Do one more revision loop",
+      body: "You do not need a full reset, but recall is still weak. A tighter revision pass should help you retain the steps and facts.",
+      action: "Tomorrow: quick revision first, then 3 to 5 recall-based practice questions.",
+    };
+  }
+
+  if (
+    reflection.hardestPart === "concepts" ||
+    reflection.supportNeed === "simpler"
+  ) {
+    return {
+      title: "Rebuild the concepts first",
+      body: "Your signal shows the core understanding is still weak. Spend tomorrow's first study block revising concepts before new topics.",
+      action: "Tomorrow: 30-45 mins concept revision + 2 worked examples before moving ahead.",
+    };
+  }
+
+  return {
+    title: "Do one more recovery round",
+    body: "You are not fully confident yet, so ExamPilot should treat this as a weak zone and guide one more structured pass before new topics.",
+    action: "Tomorrow: revision first, then a short practice round, then continue the plan only if you feel stronger.",
+  };
 }
 
 function hashString(value) {
@@ -277,6 +357,7 @@ function loadStoredReflection(planKey) {
       hardestPart: String(parsedValue?.hardestPart || ""),
       practiceCount: String(parsedValue?.practiceCount || ""),
       supportNeed: String(parsedValue?.supportNeed || ""),
+      otherIssue: String(parsedValue?.otherIssue || ""),
     };
   } catch (error) {
     return EMPTY_REFLECTION;
@@ -930,6 +1011,7 @@ export default function App() {
   const [dailyCheckIn, setDailyCheckIn] = useState(loadDailyCheckIn);
   const [todayConfidence, setTodayConfidence] = useState(0);
   const [learningReflection, setLearningReflection] = useState(EMPTY_REFLECTION);
+  const [reflectionSubmitted, setReflectionSubmitted] = useState(false);
   const [resumeSession, setResumeSession] = useState(savedSession);
   const [result, setResult] = useState(EMPTY_RESULT);
   const [progressMap, setProgressMap] = useState(loadStoredProgress(""));
@@ -1001,45 +1083,7 @@ export default function App() {
   const needsFollowUpQuestions = todayConfidence > 0 && todayConfidence < 5;
   const canRateConfidence =
     completedTodayTaskCount === totalTodayTaskCount && totalTodayTaskCount > 0;
-  const adaptiveGuidance =
-    todayConfidence === 5
-      ? {
-          title: "Go forward",
-          body: "You rated yourself very strong today. Move to the next day, but still keep the revision check in your routine.",
-          action: "Continue with tomorrow's plan and keep one short revision pass later.",
-        }
-      : learningReflection.hardestPart === "concepts" ||
-        learningReflection.supportNeed === "simpler"
-      ? {
-          title: "Rebuild the concepts first",
-          body: "Your signal shows the core understanding is still weak. Spend tomorrow's first study block revising concepts before new topics.",
-          action: "Tomorrow: 30-45 mins concept revision + 2 worked examples before moving ahead.",
-        }
-      : learningReflection.hardestPart === "application" ||
-        learningReflection.practiceCount === "0" ||
-        learningReflection.practiceCount === "1-3"
-      ? {
-          title: "Add guided practice next",
-          body: "The issue looks more like applying the topic, not just reading it. You need problem-solving repetition.",
-          action: "Tomorrow: 3 solved examples + 5 untimed practice questions on this topic first.",
-        }
-      : learningReflection.hardestPart === "speed"
-      ? {
-          title: "Reduce load and use timed recovery",
-          body: "The understanding may be okay, but speed and time management are hurting completion.",
-          action: "Tomorrow: carry only one high-priority pending task first, then do one 20-minute timed practice round.",
-        }
-      : learningReflection.supportNeed === "carryforward"
-      ? {
-          title: "Carry this forward before new topics",
-          body: "You should not move ahead immediately. This topic needs one more pass tomorrow before starting fresh content.",
-          action: "Tomorrow: finish this weak topic first, then continue the plan.",
-        }
-      : {
-          title: "Do one more revision loop",
-          body: "You are not fully confident yet, but you may not need a complete reset. A smaller revision + practice loop is the best next step.",
-          action: "Tomorrow: quick revision first, then 3 to 5 focused practice questions before moving ahead.",
-        };
+  const adaptiveGuidance = buildAdaptiveGuidance(todayConfidence, learningReflection);
   const canMarkTodayDone =
     totalTodayTaskCount > 0 &&
     completedTodayTaskCount === totalTodayTaskCount &&
@@ -1055,6 +1099,7 @@ export default function App() {
 
   useEffect(() => {
     setLearningReflection(loadStoredReflection(result.planKey));
+    setReflectionSubmitted(false);
   }, [result.planKey]);
 
   async function handleSubmit(event) {
@@ -1231,6 +1276,8 @@ export default function App() {
       setLearningReflection(EMPTY_REFLECTION);
       storeReflection(result.planKey, EMPTY_REFLECTION);
     }
+
+    setReflectionSubmitted(false);
   }
 
   function handleReflectionChange(field, value) {
@@ -1238,6 +1285,7 @@ export default function App() {
       return;
     }
 
+    setReflectionSubmitted(false);
     setLearningReflection((current) => {
       const next = {
         ...current,
@@ -1247,6 +1295,14 @@ export default function App() {
       storeReflection(result.planKey, next);
       return next;
     });
+  }
+
+  function handleReflectionSubmit() {
+    if (!hasCompletedReflection) {
+      return;
+    }
+
+    setReflectionSubmitted(true);
   }
 
   return (
@@ -1648,16 +1704,52 @@ export default function App() {
                       />
                     </div>
 
-                    {hasCompletedReflection ? (
+                    <label style={styles.followUpField}>
+                      <p style={styles.followUpQuestion}>
+                        Anything else happened? (optional)
+                      </p>
+                      <textarea
+                        value={learningReflection.otherIssue}
+                        onChange={(event) =>
+                          handleReflectionChange("otherIssue", event.target.value)
+                        }
+                        placeholder="Example: Faculty jumped too fast, I got distracted, questions were from a different pattern..."
+                        rows={3}
+                        style={styles.followUpTextarea}
+                      />
+                    </label>
+
+                    <div style={styles.followUpActions}>
+                      <button
+                        type="button"
+                        onClick={handleReflectionSubmit}
+                        disabled={!hasCompletedReflection}
+                        style={{
+                          ...styles.followUpSubmitButton,
+                          ...(!hasCompletedReflection
+                            ? styles.followUpSubmitButtonDisabled
+                            : {}),
+                        }}
+                      >
+                        Analyze my difficulty
+                      </button>
+                    </div>
+
+                    {hasCompletedReflection && reflectionSubmitted ? (
                       <div style={styles.adaptiveCard}>
                         <p style={styles.adaptiveEyebrow}>ExamPilot Recommendation</p>
                         <h5 style={styles.adaptiveTitle}>{adaptiveGuidance.title}</h5>
                         <p style={styles.adaptiveBody}>{adaptiveGuidance.body}</p>
+                        {learningReflection.otherIssue ? (
+                          <p style={styles.adaptiveBody}>
+                            You also mentioned: {learningReflection.otherIssue}
+                          </p>
+                        ) : null}
                         <p style={styles.adaptiveAction}>{adaptiveGuidance.action}</p>
                       </div>
                     ) : (
                       <p style={styles.followUpHint}>
-                        Complete all 3 answers to unlock your next-step recommendation.
+                        Complete all 3 answers, then click "Analyze my difficulty" to unlock your next-step recommendation.
                       </p>
                     )}
                   </div>
@@ -2539,6 +2631,38 @@ const styles = {
     border: "1px solid rgba(45, 212, 191, 0.55)",
     background: "rgba(45, 212, 191, 0.14)",
     boxShadow: "0 0 0 1px rgba(45, 212, 191, 0.22) inset",
+  },
+  followUpTextarea: {
+    width: "100%",
+    minHeight: "86px",
+    borderRadius: "14px",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    background: "rgba(255, 255, 255, 0.03)",
+    color: "#f8fafc",
+    padding: "14px 16px",
+    fontSize: "0.95rem",
+    lineHeight: 1.55,
+    resize: "vertical",
+    outline: "none",
+    boxSizing: "border-box",
+  },
+  followUpActions: {
+    display: "flex",
+    justifyContent: "flex-start",
+  },
+  followUpSubmitButton: {
+    border: "none",
+    borderRadius: "999px",
+    background: "linear-gradient(135deg, #14b8a6, #22c55e)",
+    color: "#04111a",
+    padding: "12px 20px",
+    fontSize: "0.95rem",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  followUpSubmitButtonDisabled: {
+    opacity: 0.45,
+    cursor: "not-allowed",
   },
   followUpHint: {
     margin: 0,
