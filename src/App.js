@@ -6,6 +6,7 @@ const PLAN_USAGE_STORAGE_KEY = "exampilot-full-plan-usage-count";
 const PLAN_SESSION_STORAGE_KEY = "exampilot-current-plan-session";
 const PLAN_PROGRESS_STORAGE_PREFIX = "exampilot-plan-progress";
 const DAILY_CHECKIN_STORAGE_KEY = "exampilot-daily-checkin";
+const PLAN_CONFIDENCE_STORAGE_PREFIX = "exampilot-plan-confidence";
 const FOUNDER_MODE_STORAGE_KEY = "exampilot-founder-mode";
 const FOUNDER_MODE_QUERY_KEY = "pilot";
 const FOUNDER_MODE_QUERY_VALUE = "founder";
@@ -171,6 +172,36 @@ function storeProgress(planKey, progressMap) {
     getProgressStorageKey(planKey),
     JSON.stringify(progressMap)
   );
+}
+
+function getConfidenceStorageKey(planKey) {
+  return `${PLAN_CONFIDENCE_STORAGE_PREFIX}:${planKey}`;
+}
+
+function loadStoredConfidence(planKey) {
+  if (typeof window === "undefined" || !planKey) {
+    return 0;
+  }
+
+  const rawValue = window.localStorage.getItem(getConfidenceStorageKey(planKey));
+  const parsedValue = Number(rawValue);
+
+  return Number.isFinite(parsedValue) && parsedValue >= 1 && parsedValue <= 5
+    ? parsedValue
+    : 0;
+}
+
+function storeConfidence(planKey, confidence) {
+  if (typeof window === "undefined" || !planKey) {
+    return;
+  }
+
+  if (!confidence) {
+    window.localStorage.removeItem(getConfidenceStorageKey(planKey));
+    return;
+  }
+
+  window.localStorage.setItem(getConfidenceStorageKey(planKey), String(confidence));
 }
 
 function getISTDateKey(date = new Date()) {
@@ -807,6 +838,7 @@ export default function App() {
   const [founderMode] = useState(getFounderMode);
   const [planUsageCount, setPlanUsageCount] = useState(getStoredPlanUsageCount);
   const [dailyCheckIn, setDailyCheckIn] = useState(loadDailyCheckIn);
+  const [todayConfidence, setTodayConfidence] = useState(0);
   const [resumeSession, setResumeSession] = useState(savedSession);
   const [result, setResult] = useState(EMPTY_RESULT);
   const [progressMap, setProgressMap] = useState(loadStoredProgress(""));
@@ -855,6 +887,22 @@ export default function App() {
   const rewardProgressPercent = nextRewardMilestone
     ? Math.min(100, Math.round((streakCount / nextRewardMilestone.days) * 100))
     : 100;
+  const confidenceLabel =
+    todayConfidence <= 0
+      ? "Not rated yet"
+      : todayConfidence <= 2
+      ? "Needs revision"
+      : todayConfidence === 3
+      ? "Moderate understanding"
+      : "Strong understanding";
+  const confidenceCopy =
+    todayConfidence <= 0
+      ? "After finishing today's tasks, rate your confidence so ExamPilot can start understanding what feels weak or strong."
+      : todayConfidence <= 2
+      ? "Low confidence signal detected. Revisit today's key topics and practice again before moving ahead."
+      : todayConfidence === 3
+      ? "You are partly confident. One more revision or practice round should strengthen this topic."
+      : "Strong confidence signal detected. You can move ahead, and later ExamPilot can reduce extra revision on strong topics.";
   const canMarkTodayDone =
     totalTodayTaskCount > 0 &&
     completedTodayTaskCount === totalTodayTaskCount &&
@@ -862,6 +910,10 @@ export default function App() {
 
   useEffect(() => {
     setProgressMap(loadStoredProgress(result.planKey));
+  }, [result.planKey]);
+
+  useEffect(() => {
+    setTodayConfidence(loadStoredConfidence(result.planKey));
   }, [result.planKey]);
 
   async function handleSubmit(event) {
@@ -1024,6 +1076,15 @@ export default function App() {
 
     setDailyCheckIn(nextValue);
     storeDailyCheckIn(nextValue);
+  }
+
+  function handleConfidenceSelect(score) {
+    if (completedTodayTaskCount !== totalTodayTaskCount || !result.planKey) {
+      return;
+    }
+
+    setTodayConfidence(score);
+    storeConfidence(result.planKey, score);
   }
 
   return (
@@ -1338,6 +1399,47 @@ export default function App() {
                     );
                   })}
                 </div>
+              </div>
+
+              <div style={styles.confidenceCard}>
+                <div style={styles.confidenceHeader}>
+                  <div>
+                    <p style={styles.confidenceEyebrow}>Learning Signal</p>
+                    <h4 style={styles.confidenceTitle}>
+                      Rate how confident you feel after today&apos;s work
+                    </h4>
+                  </div>
+                  <span style={styles.confidenceStatus}>{confidenceLabel}</span>
+                </div>
+
+                <p style={styles.confidenceCopy}>{confidenceCopy}</p>
+
+                <div style={styles.confidenceScale}>
+                  {[1, 2, 3, 4, 5].map((score) => {
+                    const active = todayConfidence === score;
+                    const disabled = completedTodayTaskCount !== totalTodayTaskCount;
+
+                    return (
+                      <button
+                        key={score}
+                        type="button"
+                        onClick={() => handleConfidenceSelect(score)}
+                        disabled={disabled}
+                        style={{
+                          ...styles.confidenceButton,
+                          ...(active ? styles.confidenceButtonActive : {}),
+                          ...(disabled ? styles.confidenceButtonDisabled : {}),
+                        }}
+                      >
+                        {score}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p style={styles.confidenceLegend}>
+                  1 = very weak, 3 = average, 5 = very strong
+                </p>
               </div>
             </div>
 
@@ -2084,6 +2186,76 @@ const styles = {
     color: "#94a3b8",
     lineHeight: 1.55,
     fontSize: "0.92rem",
+  },
+  confidenceCard: {
+    marginTop: "18px",
+    padding: "18px",
+    borderRadius: "18px",
+    background: "rgba(255, 255, 255, 0.03)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    display: "grid",
+    gap: "14px",
+  },
+  confidenceHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  confidenceEyebrow: {
+    margin: 0,
+    color: "#c4b5fd",
+    fontSize: "0.76rem",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  confidenceTitle: {
+    margin: "8px 0 0",
+    fontSize: "1.02rem",
+    lineHeight: 1.45,
+  },
+  confidenceStatus: {
+    padding: "8px 12px",
+    borderRadius: "999px",
+    background: "rgba(196, 181, 253, 0.12)",
+    color: "#ddd6fe",
+    fontSize: "0.82rem",
+    fontWeight: 700,
+  },
+  confidenceCopy: {
+    margin: 0,
+    color: "#cbd5e1",
+    lineHeight: 1.65,
+  },
+  confidenceScale: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+  confidenceButton: {
+    width: "46px",
+    height: "46px",
+    borderRadius: "14px",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    background: "rgba(15, 23, 42, 0.78)",
+    color: "#f8fafc",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  confidenceButtonActive: {
+    background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
+    border: "1px solid rgba(196, 181, 253, 0.5)",
+  },
+  confidenceButtonDisabled: {
+    opacity: 0.45,
+    cursor: "not-allowed",
+  },
+  confidenceLegend: {
+    margin: 0,
+    color: "#94a3b8",
+    fontSize: "0.88rem",
+    lineHeight: 1.5,
   },
   progressHeader: {
     display: "flex",
