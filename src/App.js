@@ -1175,7 +1175,7 @@ export default function App() {
   }
 
   function handleConfidenceSelect(score) {
-    if (completedTodayTaskCount !== totalTodayTaskCount || !result.planKey) {
+    if (!canRateConfidence || !result.planKey) {
       return;
     }
 
@@ -1534,7 +1534,7 @@ export default function App() {
                 <div style={styles.confidenceScale}>
                   {[1, 2, 3, 4, 5].map((score) => {
                     const active = todayConfidence === score;
-                    const disabled = completedTodayTaskCount !== totalTodayTaskCount;
+                    const disabled = !canRateConfidence;
 
                     return (
                       <button
