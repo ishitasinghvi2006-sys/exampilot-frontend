@@ -7,6 +7,7 @@ const PLAN_SESSION_STORAGE_KEY = "exampilot-current-plan-session";
 const PLAN_PROGRESS_STORAGE_PREFIX = "exampilot-plan-progress";
 const DAILY_CHECKIN_STORAGE_KEY = "exampilot-daily-checkin";
 const PLAN_CONFIDENCE_STORAGE_PREFIX = "exampilot-plan-confidence";
+const PLAN_REFLECTION_STORAGE_PREFIX = "exampilot-plan-reflection";
 const FOUNDER_MODE_STORAGE_KEY = "exampilot-founder-mode";
 const FOUNDER_MODE_QUERY_KEY = "pilot";
 const FOUNDER_MODE_QUERY_VALUE = "founder";
@@ -39,6 +40,11 @@ const EMPTY_RESULT = {
   daysLeft: null,
   planKey: "",
   meta: null,
+};
+const EMPTY_REFLECTION = {
+  hardestPart: "",
+  practiceCount: "",
+  supportNeed: "",
 };
 
 const SECTION_HEADING_PATTERN =
@@ -202,6 +208,45 @@ function storeConfidence(planKey, confidence) {
   }
 
   window.localStorage.setItem(getConfidenceStorageKey(planKey), String(confidence));
+}
+
+function getReflectionStorageKey(planKey) {
+  return `${PLAN_REFLECTION_STORAGE_PREFIX}:${planKey}`;
+}
+
+function loadStoredReflection(planKey) {
+  if (typeof window === "undefined" || !planKey) {
+    return EMPTY_REFLECTION;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(getReflectionStorageKey(planKey));
+
+    if (!rawValue) {
+      return EMPTY_REFLECTION;
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+
+    return {
+      hardestPart: String(parsedValue?.hardestPart || ""),
+      practiceCount: String(parsedValue?.practiceCount || ""),
+      supportNeed: String(parsedValue?.supportNeed || ""),
+    };
+  } catch (error) {
+    return EMPTY_REFLECTION;
+  }
+}
+
+function storeReflection(planKey, reflection) {
+  if (typeof window === "undefined" || !planKey) {
+    return;
+  }
+
+  window.localStorage.setItem(
+    getReflectionStorageKey(planKey),
+    JSON.stringify(reflection)
+  );
 }
 
 function getISTDateKey(date = new Date()) {
@@ -839,6 +884,7 @@ export default function App() {
   const [planUsageCount, setPlanUsageCount] = useState(getStoredPlanUsageCount);
   const [dailyCheckIn, setDailyCheckIn] = useState(loadDailyCheckIn);
   const [todayConfidence, setTodayConfidence] = useState(0);
+  const [learningReflection, setLearningReflection] = useState(EMPTY_REFLECTION);
   const [resumeSession, setResumeSession] = useState(savedSession);
   const [result, setResult] = useState(EMPTY_RESULT);
   const [progressMap, setProgressMap] = useState(loadStoredProgress(""));
@@ -903,6 +949,52 @@ export default function App() {
       : todayConfidence === 3
       ? "You are partly confident. One more revision or practice round should strengthen this topic."
       : "Strong confidence signal detected. You can move ahead, and later ExamPilot can reduce extra revision on strong topics.";
+  const hasCompletedReflection =
+    Boolean(learningReflection.hardestPart) &&
+    Boolean(learningReflection.practiceCount) &&
+    Boolean(learningReflection.supportNeed);
+  const needsFollowUpQuestions = todayConfidence > 0 && todayConfidence < 5;
+  const canRateConfidence =
+    completedTodayTaskCount === totalTodayTaskCount && totalTodayTaskCount > 0;
+  const adaptiveGuidance =
+    todayConfidence === 5
+      ? {
+          title: "Go forward",
+          body: "You rated yourself very strong today. Move to the next day, but still keep the revision check in your routine.",
+          action: "Continue with tomorrow's plan and keep one short revision pass later.",
+        }
+      : learningReflection.hardestPart === "concepts" ||
+        learningReflection.supportNeed === "simpler"
+      ? {
+          title: "Rebuild the concepts first",
+          body: "Your signal shows the core understanding is still weak. Spend tomorrow's first study block revising concepts before new topics.",
+          action: "Tomorrow: 30-45 mins concept revision + 2 worked examples before moving ahead.",
+        }
+      : learningReflection.hardestPart === "application" ||
+        learningReflection.practiceCount === "0" ||
+        learningReflection.practiceCount === "1-3"
+      ? {
+          title: "Add guided practice next",
+          body: "The issue looks more like applying the topic, not just reading it. You need problem-solving repetition.",
+          action: "Tomorrow: 3 solved examples + 5 untimed practice questions on this topic first.",
+        }
+      : learningReflection.hardestPart === "speed"
+      ? {
+          title: "Reduce load and use timed recovery",
+          body: "The understanding may be okay, but speed and time management are hurting completion.",
+          action: "Tomorrow: carry only one high-priority pending task first, then do one 20-minute timed practice round.",
+        }
+      : learningReflection.supportNeed === "carryforward"
+      ? {
+          title: "Carry this forward before new topics",
+          body: "You should not move ahead immediately. This topic needs one more pass tomorrow before starting fresh content.",
+          action: "Tomorrow: finish this weak topic first, then continue the plan.",
+        }
+      : {
+          title: "Do one more revision loop",
+          body: "You are not fully confident yet, but you may not need a complete reset. A smaller revision + practice loop is the best next step.",
+          action: "Tomorrow: quick revision first, then 3 to 5 focused practice questions before moving ahead.",
+        };
   const canMarkTodayDone =
     totalTodayTaskCount > 0 &&
     completedTodayTaskCount === totalTodayTaskCount &&
@@ -914,6 +1006,10 @@ export default function App() {
 
   useEffect(() => {
     setTodayConfidence(loadStoredConfidence(result.planKey));
+  }, [result.planKey]);
+
+  useEffect(() => {
+    setLearningReflection(loadStoredReflection(result.planKey));
   }, [result.planKey]);
 
   async function handleSubmit(event) {
@@ -1085,6 +1181,27 @@ export default function App() {
 
     setTodayConfidence(score);
     storeConfidence(result.planKey, score);
+
+    if (score === 5) {
+      setLearningReflection(EMPTY_REFLECTION);
+      storeReflection(result.planKey, EMPTY_REFLECTION);
+    }
+  }
+
+  function handleReflectionChange(field, value) {
+    if (!result.planKey) {
+      return;
+    }
+
+    setLearningReflection((current) => {
+      const next = {
+        ...current,
+        [field]: value,
+      };
+
+      storeReflection(result.planKey, next);
+      return next;
+    });
   }
 
   return (
@@ -1440,6 +1557,90 @@ export default function App() {
                 <p style={styles.confidenceLegend}>
                   1 = very weak, 3 = average, 5 = very strong
                 </p>
+
+                {todayConfidence === 5 ? (
+                  <div style={styles.adaptiveCard}>
+                    <p style={styles.adaptiveEyebrow}>Adaptive Guidance</p>
+                    <h5 style={styles.adaptiveTitle}>{adaptiveGuidance.title}</h5>
+                    <p style={styles.adaptiveBody}>{adaptiveGuidance.body}</p>
+                    <p style={styles.adaptiveAction}>{adaptiveGuidance.action}</p>
+                  </div>
+                ) : null}
+
+                {needsFollowUpQuestions ? (
+                  <div style={styles.followUpCard}>
+                    <p style={styles.followUpEyebrow}>Confidence Follow-up</p>
+                    <h5 style={styles.followUpTitle}>
+                      Before moving forward, answer these so ExamPilot can guide your next step
+                    </h5>
+
+                    <div style={styles.followUpGrid}>
+                      <label style={styles.followUpField}>
+                        What felt hardest?
+                        <select
+                          value={learningReflection.hardestPart}
+                          onChange={(event) =>
+                            handleReflectionChange("hardestPart", event.target.value)
+                          }
+                          style={styles.followUpSelect}
+                        >
+                          <option value="">Select one</option>
+                          <option value="concepts">Concepts were unclear</option>
+                          <option value="application">Could not solve application questions</option>
+                          <option value="speed">Time/speed was the problem</option>
+                          <option value="memory">I forgot steps, formulas, or facts</option>
+                        </select>
+                      </label>
+
+                      <label style={styles.followUpField}>
+                        How much practice did you do?
+                        <select
+                          value={learningReflection.practiceCount}
+                          onChange={(event) =>
+                            handleReflectionChange("practiceCount", event.target.value)
+                          }
+                          style={styles.followUpSelect}
+                        >
+                          <option value="">Select one</option>
+                          <option value="0">No practice questions</option>
+                          <option value="1-3">Only 1 to 3 questions</option>
+                          <option value="4-10">Around 4 to 10 questions</option>
+                          <option value="10+">More than 10 questions</option>
+                        </select>
+                      </label>
+
+                      <label style={styles.followUpField}>
+                        What support do you need next?
+                        <select
+                          value={learningReflection.supportNeed}
+                          onChange={(event) =>
+                            handleReflectionChange("supportNeed", event.target.value)
+                          }
+                          style={styles.followUpSelect}
+                        >
+                          <option value="">Select one</option>
+                          <option value="simpler">Need simpler explanation</option>
+                          <option value="examples">Need more examples</option>
+                          <option value="carryforward">Need this carried forward tomorrow</option>
+                          <option value="revision">Need one more revision round</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    {hasCompletedReflection ? (
+                      <div style={styles.adaptiveCard}>
+                        <p style={styles.adaptiveEyebrow}>ExamPilot Recommendation</p>
+                        <h5 style={styles.adaptiveTitle}>{adaptiveGuidance.title}</h5>
+                        <p style={styles.adaptiveBody}>{adaptiveGuidance.body}</p>
+                        <p style={styles.adaptiveAction}>{adaptiveGuidance.action}</p>
+                      </div>
+                    ) : (
+                      <p style={styles.followUpHint}>
+                        Complete all 3 answers to unlock your next-step recommendation.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -2256,6 +2457,86 @@ const styles = {
     color: "#94a3b8",
     fontSize: "0.88rem",
     lineHeight: 1.5,
+  },
+  followUpCard: {
+    marginTop: "14px",
+    padding: "16px",
+    borderRadius: "16px",
+    background: "rgba(15, 23, 42, 0.78)",
+    border: "1px solid rgba(196, 181, 253, 0.12)",
+    display: "grid",
+    gap: "14px",
+  },
+  followUpEyebrow: {
+    margin: 0,
+    color: "#c4b5fd",
+    fontSize: "0.76rem",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  followUpTitle: {
+    margin: "6px 0 0",
+    fontSize: "1rem",
+    lineHeight: 1.45,
+  },
+  followUpGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "12px",
+  },
+  followUpField: {
+    display: "grid",
+    gap: "8px",
+    color: "#e2e8f0",
+    fontSize: "0.92rem",
+    fontWeight: 600,
+  },
+  followUpSelect: {
+    width: "100%",
+    borderRadius: "12px",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    background: "rgba(255, 255, 255, 0.03)",
+    color: "#f8fafc",
+    padding: "12px 14px",
+    fontSize: "0.95rem",
+    outline: "none",
+  },
+  followUpHint: {
+    margin: 0,
+    color: "#cbd5e1",
+    lineHeight: 1.6,
+  },
+  adaptiveCard: {
+    marginTop: "14px",
+    padding: "16px",
+    borderRadius: "16px",
+    background: "rgba(34, 197, 94, 0.08)",
+    border: "1px solid rgba(74, 222, 128, 0.18)",
+    display: "grid",
+    gap: "8px",
+  },
+  adaptiveEyebrow: {
+    margin: 0,
+    color: "#86efac",
+    fontSize: "0.76rem",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  adaptiveTitle: {
+    margin: 0,
+    fontSize: "1rem",
+    lineHeight: 1.4,
+  },
+  adaptiveBody: {
+    margin: 0,
+    color: "#d1fae5",
+    lineHeight: 1.6,
+  },
+  adaptiveAction: {
+    margin: 0,
+    color: "#f8fafc",
+    lineHeight: 1.6,
+    fontWeight: 700,
   },
   progressHeader: {
     display: "flex",
