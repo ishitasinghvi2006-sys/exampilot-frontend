@@ -46,6 +46,24 @@ const EMPTY_REFLECTION = {
   practiceCount: "",
   supportNeed: "",
 };
+const HARDEST_PART_OPTIONS = [
+  { value: "concepts", label: "Concepts were unclear" },
+  { value: "application", label: "Could not solve application questions" },
+  { value: "speed", label: "Time/speed was the problem" },
+  { value: "memory", label: "I forgot steps, formulas, or facts" },
+];
+const PRACTICE_COUNT_OPTIONS = [
+  { value: "0", label: "No practice questions" },
+  { value: "1-3", label: "Only 1 to 3 questions" },
+  { value: "4-10", label: "Around 4 to 10 questions" },
+  { value: "10+", label: "More than 10 questions" },
+];
+const SUPPORT_NEED_OPTIONS = [
+  { value: "simpler", label: "Need simpler explanation" },
+  { value: "examples", label: "Need more examples" },
+  { value: "carryforward", label: "Need this carried forward tomorrow" },
+  { value: "revision", label: "Need one more revision round" },
+];
 
 const SECTION_HEADING_PATTERN =
   /^(Morning(?:\s*\([^)]*\))?|Evening(?:\s*\([^)]*\))?|Must Finish Today|Practice|Revision Check|Key Points|Practice Questions|Memory Tricks|Focus|Why This Day Matters)\s*:?\s*(.*)$/i;
@@ -56,6 +74,33 @@ function buildWhatsAppLink() {
   );
 
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
+}
+
+function ReflectionOptionGroup({ label, value, options, onSelect }) {
+  return (
+    <div style={styles.followUpField}>
+      <p style={styles.followUpQuestion}>{label}</p>
+      <div style={styles.followUpChoices}>
+        {options.map((option) => {
+          const active = value === option.value;
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onSelect(option.value)}
+              style={{
+                ...styles.followUpChoiceButton,
+                ...(active ? styles.followUpChoiceButtonActive : {}),
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function buildUpiPaymentLink() {
@@ -1575,56 +1620,32 @@ export default function App() {
                     </h5>
 
                     <div style={styles.followUpGrid}>
-                      <label style={styles.followUpField}>
-                        What felt hardest?
-                        <select
-                          value={learningReflection.hardestPart}
-                          onChange={(event) =>
-                            handleReflectionChange("hardestPart", event.target.value)
-                          }
-                          style={styles.followUpSelect}
-                        >
-                          <option value="">Select one</option>
-                          <option value="concepts">Concepts were unclear</option>
-                          <option value="application">Could not solve application questions</option>
-                          <option value="speed">Time/speed was the problem</option>
-                          <option value="memory">I forgot steps, formulas, or facts</option>
-                        </select>
-                      </label>
+                      <ReflectionOptionGroup
+                        label="What felt hardest?"
+                        value={learningReflection.hardestPart}
+                        options={HARDEST_PART_OPTIONS}
+                        onSelect={(nextValue) =>
+                          handleReflectionChange("hardestPart", nextValue)
+                        }
+                      />
 
-                      <label style={styles.followUpField}>
-                        How much practice did you do?
-                        <select
-                          value={learningReflection.practiceCount}
-                          onChange={(event) =>
-                            handleReflectionChange("practiceCount", event.target.value)
-                          }
-                          style={styles.followUpSelect}
-                        >
-                          <option value="">Select one</option>
-                          <option value="0">No practice questions</option>
-                          <option value="1-3">Only 1 to 3 questions</option>
-                          <option value="4-10">Around 4 to 10 questions</option>
-                          <option value="10+">More than 10 questions</option>
-                        </select>
-                      </label>
+                      <ReflectionOptionGroup
+                        label="How much practice did you do?"
+                        value={learningReflection.practiceCount}
+                        options={PRACTICE_COUNT_OPTIONS}
+                        onSelect={(nextValue) =>
+                          handleReflectionChange("practiceCount", nextValue)
+                        }
+                      />
 
-                      <label style={styles.followUpField}>
-                        What support do you need next?
-                        <select
-                          value={learningReflection.supportNeed}
-                          onChange={(event) =>
-                            handleReflectionChange("supportNeed", event.target.value)
-                          }
-                          style={styles.followUpSelect}
-                        >
-                          <option value="">Select one</option>
-                          <option value="simpler">Need simpler explanation</option>
-                          <option value="examples">Need more examples</option>
-                          <option value="carryforward">Need this carried forward tomorrow</option>
-                          <option value="revision">Need one more revision round</option>
-                        </select>
-                      </label>
+                      <ReflectionOptionGroup
+                        label="What support do you need next?"
+                        value={learningReflection.supportNeed}
+                        options={SUPPORT_NEED_OPTIONS}
+                        onSelect={(nextValue) =>
+                          handleReflectionChange("supportNeed", nextValue)
+                        }
+                      />
                     </div>
 
                     {hasCompletedReflection ? (
@@ -2486,20 +2507,38 @@ const styles = {
   },
   followUpField: {
     display: "grid",
-    gap: "8px",
+    gap: "10px",
     color: "#e2e8f0",
     fontSize: "0.92rem",
     fontWeight: 600,
   },
-  followUpSelect: {
+  followUpQuestion: {
+    margin: 0,
+    color: "#f8fafc",
+    fontSize: "0.95rem",
+    lineHeight: 1.5,
+  },
+  followUpChoices: {
+    display: "grid",
+    gap: "10px",
+  },
+  followUpChoiceButton: {
     width: "100%",
-    borderRadius: "12px",
+    borderRadius: "14px",
     border: "1px solid rgba(255, 255, 255, 0.08)",
     background: "rgba(255, 255, 255, 0.03)",
     color: "#f8fafc",
-    padding: "12px 14px",
+    padding: "14px 16px",
     fontSize: "0.95rem",
-    outline: "none",
+    lineHeight: 1.45,
+    textAlign: "left",
+    cursor: "pointer",
+    transition: "all 0.18s ease",
+  },
+  followUpChoiceButtonActive: {
+    border: "1px solid rgba(45, 212, 191, 0.55)",
+    background: "rgba(45, 212, 191, 0.14)",
+    boxShadow: "0 0 0 1px rgba(45, 212, 191, 0.22) inset",
   },
   followUpHint: {
     margin: 0,
