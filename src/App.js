@@ -399,6 +399,10 @@ function loadDailyCheckIn() {
     return {
       streakCount: 0,
       lastCheckInDate: "",
+      completionPercent: 0,
+      checkInQuality: "",
+      completedTodayTasks: 0,
+      totalTodayTasks: 0,
     };
   }
 
@@ -420,13 +424,57 @@ function loadDailyCheckIn() {
           ? Number(parsedValue.streakCount)
           : 0,
       lastCheckInDate: String(parsedValue?.lastCheckInDate || ""),
+      completionPercent:
+        Number.isFinite(Number(parsedValue?.completionPercent)) &&
+        Number(parsedValue?.completionPercent) > 0
+          ? Number(parsedValue.completionPercent)
+          : 0,
+      checkInQuality: String(parsedValue?.checkInQuality || ""),
+      completedTodayTasks:
+        Number.isFinite(Number(parsedValue?.completedTodayTasks)) &&
+        Number(parsedValue?.completedTodayTasks) > 0
+          ? Number(parsedValue.completedTodayTasks)
+          : 0,
+      totalTodayTasks:
+        Number.isFinite(Number(parsedValue?.totalTodayTasks)) &&
+        Number(parsedValue?.totalTodayTasks) > 0
+          ? Number(parsedValue.totalTodayTasks)
+          : 0,
     };
   } catch (error) {
     return {
       streakCount: 0,
       lastCheckInDate: "",
+      completionPercent: 0,
+      checkInQuality: "",
+      completedTodayTasks: 0,
+      totalTodayTasks: 0,
     };
   }
+}
+
+function getCheckInQuality(completionPercent) {
+  if (completionPercent >= 80) {
+    return "strong";
+  }
+
+  if (completionPercent >= 50) {
+    return "solid";
+  }
+
+  return "short";
+}
+
+function getCheckInMessage(completionPercent) {
+  if (completionPercent >= 80) {
+    return "Strong day. You completed most of today's plan.";
+  }
+
+  if (completionPercent >= 50) {
+    return "Solid progress. You moved forward today.";
+  }
+
+  return "Short day. Tomorrow we catch up from the highest-priority pending work.";
 }
 
 function storeDailyCheckIn(value) {
@@ -1015,6 +1063,7 @@ export default function App() {
   const [resumeSession, setResumeSession] = useState(savedSession);
   const [result, setResult] = useState(EMPTY_RESULT);
   const [progressMap, setProgressMap] = useState(loadStoredProgress(""));
+  const [showUpcomingDays, setShowUpcomingDays] = useState(false);
 
   const previewPlan = result.fullPlan.slice(0, FREE_PREVIEW_DAYS);
   const hiddenDayCount = Math.max(result.fullPlan.length - FREE_PREVIEW_DAYS, 0);
@@ -1027,11 +1076,7 @@ export default function App() {
     founderMode || (planUsageCount > 0 && planUsageCount <= FREE_FULL_PLAN_LIMIT);
   const trackablePlanItems = hasFullPlanAccess ? result.fullPlan : previewPlan;
   const allPlanTasks = collectPlanTasks(trackablePlanItems, result.planKey);
-  const completedTaskCount = allPlanTasks.filter((task) => progressMap[task.id]).length;
   const totalTaskCount = allPlanTasks.length;
-  const progressPercent = totalTaskCount
-    ? Math.round((completedTaskCount / totalTaskCount) * 100)
-    : 0;
   const pendingTasks = allPlanTasks.filter((task) => !progressMap[task.id]);
   const pendingDayGroups = buildPendingDayGroups(pendingTasks);
   const recoveryTaskLimit = Math.max(
@@ -1044,6 +1089,18 @@ export default function App() {
   const completedTodayTaskCount = todayPlanTasks.filter((task) => progressMap[task.id]).length;
   const totalTodayTaskCount = todayPlanTasks.length;
   const pendingTodayTaskCount = Math.max(totalTodayTaskCount - completedTodayTaskCount, 0);
+  const todayProgressPercent = totalTodayTaskCount
+    ? Math.round((completedTodayTaskCount / totalTodayTaskCount) * 100)
+    : 0;
+  const todayProgressLabel =
+    completedTodayTaskCount === 0
+      ? "Ready to start"
+      : `${completedTodayTaskCount} / ${totalTodayTaskCount} today`;
+  const backlogLabel = totalTaskCount
+    ? `${totalTaskCount} tasks across ${trackablePlanItems.length} day${
+        trackablePlanItems.length === 1 ? "" : "s"
+      }`
+    : "";
   const todayDateKey = getISTDateKey();
   const yesterdayDateKey = getYesterdayISTDateKey();
   const hasCheckedInToday = dailyCheckIn.lastCheckInDate === todayDateKey;
@@ -1082,12 +1139,20 @@ export default function App() {
     Boolean(learningReflection.supportNeed);
   const needsFollowUpQuestions = todayConfidence > 0 && todayConfidence < 5;
   const canRateConfidence =
-    completedTodayTaskCount === totalTodayTaskCount && totalTodayTaskCount > 0;
+    hasCheckedInToday || completedTodayTaskCount > 0;
   const adaptiveGuidance = buildAdaptiveGuidance(todayConfidence, learningReflection);
   const canMarkTodayDone =
     totalTodayTaskCount > 0 &&
-    completedTodayTaskCount === totalTodayTaskCount &&
+    completedTodayTaskCount > 0 &&
     !hasCheckedInToday;
+  const checkInQuality =
+    hasCheckedInToday && dailyCheckIn.checkInQuality
+      ? dailyCheckIn.checkInQuality
+      : getCheckInQuality(todayProgressPercent);
+  const checkInPercent =
+    hasCheckedInToday && dailyCheckIn.completionPercent
+      ? dailyCheckIn.completionPercent
+      : todayProgressPercent;
 
   useEffect(() => {
     setProgressMap(loadStoredProgress(result.planKey));
@@ -1179,6 +1244,7 @@ export default function App() {
       setResumeSession(nextSession);
       storePlanSession(nextSession);
       setViewMode("today");
+      setShowUpcomingDays(false);
 
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1210,6 +1276,7 @@ export default function App() {
     setResumeSession(null);
     clearStoredPlanSession();
     setViewMode("today");
+    setShowUpcomingDays(false);
     setError("");
   }
 
@@ -1221,6 +1288,7 @@ export default function App() {
     setResult(resumeSession.result);
     setProgressMap(loadStoredProgress(resumeSession.result.planKey));
     setViewMode("today");
+    setShowUpcomingDays(false);
 
     setTimeout(() => {
       resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1234,6 +1302,7 @@ export default function App() {
     setFormData(DEFAULT_FORM_DATA);
     setProgressMap({});
     setViewMode("today");
+    setShowUpcomingDays(false);
     setError("");
   }
 
@@ -1254,10 +1323,15 @@ export default function App() {
       return;
     }
 
+    const completionPercent = todayProgressPercent;
     const nextValue = {
       streakCount:
         dailyCheckIn.lastCheckInDate === yesterdayDateKey ? dailyCheckIn.streakCount + 1 : 1,
       lastCheckInDate: todayDateKey,
+      completionPercent,
+      checkInQuality: getCheckInQuality(completionPercent),
+      completedTodayTasks: completedTodayTaskCount,
+      totalTodayTasks: totalTodayTaskCount,
     };
 
     setDailyCheckIn(nextValue);
@@ -1471,7 +1545,7 @@ export default function App() {
                     ...(viewMode === "full" ? styles.toggleButtonActive : {}),
                   }}
                 >
-                  Full Plan
+                  Full Roadmap
                 </button>
               </div>
             </div>
@@ -1525,19 +1599,37 @@ export default function App() {
                 <div style={styles.accountabilityMetric}>
                   <span style={styles.accountabilityMetricLabel}>Check-in Status</span>
                   <strong style={styles.accountabilityMetricValue}>
-                    {hasCheckedInToday ? "Checked in today" : "Pending today"}
+                    {hasCheckedInToday
+                      ? `Checked in today - ${checkInPercent}%`
+                      : "Pending today"}
                   </strong>
+                  {hasCheckedInToday ? (
+                    <span
+                      style={{
+                        ...styles.checkInTag,
+                        ...(checkInQuality === "strong"
+                          ? styles.checkInTagStrong
+                          : checkInQuality === "solid"
+                          ? styles.checkInTagSolid
+                          : styles.checkInTagShort),
+                      }}
+                    >
+                      {checkInQuality === "strong"
+                        ? "Strong day"
+                        : checkInQuality === "solid"
+                        ? "Solid progress"
+                        : "Partial day"}
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
               <p style={styles.accountabilityCopy}>
                 {hasCheckedInToday
-                  ? "You already marked today done. Come back tomorrow and keep the streak alive."
+                  ? `${getCheckInMessage(checkInPercent)} Come back tomorrow and keep the streak alive.`
                   : canMarkTodayDone
-                  ? "Today's tasks are complete. Mark the day done now to keep your streak going."
-                  : `Finish ${pendingTodayTaskCount} more ${
-                      pendingTodayTaskCount === 1 ? "task" : "tasks"
-                    } from Today's Plan before marking the day done.`}
+                  ? `${todayProgressPercent}% of today's plan is done. Check in now and continue from pending work tomorrow.`
+                  : "Complete at least 1 task from Today's Plan to check in and keep your study habit alive."}
               </p>
 
               <button
@@ -1552,8 +1644,8 @@ export default function App() {
                 {hasCheckedInToday
                   ? "Checked in today"
                   : canMarkTodayDone
-                  ? "Mark today done"
-                  : "Finish today's tasks first"}
+                  ? "Check in today"
+                  : "Complete 1 task to check in"}
               </button>
 
               <div style={styles.rewardsCard}>
@@ -1760,25 +1852,34 @@ export default function App() {
             <div style={styles.progressCard}>
               <div style={styles.progressHeader}>
                 <div>
-                  <p style={styles.progressEyebrow}>Daily Execution</p>
+                  <p style={styles.progressEyebrow}>Today&apos;s Progress</p>
                   <h3 style={styles.progressTitle}>
-                    {completedTaskCount} / {totalTaskCount} tasks completed
+                    {todayProgressLabel}
                   </h3>
+                  {backlogLabel ? (
+                    <p style={styles.progressBacklogLabel}>{backlogLabel}</p>
+                  ) : null}
                 </div>
-                <strong style={styles.progressPercent}>{progressPercent}%</strong>
+                <strong style={styles.progressPercent}>
+                  {completedTodayTaskCount === 0 ? "Start" : `${todayProgressPercent}%`}
+                </strong>
               </div>
               <div style={styles.progressTrack}>
                 <div
                   style={{
                     ...styles.progressFill,
-                    width: `${progressPercent}%`,
+                    width: `${todayProgressPercent}%`,
                   }}
                 />
               </div>
               <p style={styles.progressMeta}>
-                {pendingTasks.length > 0
-                  ? `${pendingTasks.length} tasks are still pending.`
-                  : "All tasks are completed for this plan."}
+                {pendingTodayTaskCount > 0
+                  ? `${pendingTodayTaskCount} task${
+                      pendingTodayTaskCount === 1 ? "" : "s"
+                    } left for today.`
+                  : totalTodayTaskCount > 0
+                  ? "Today's tasks are completed."
+                  : "Generate a plan to start today's progress."}
               </p>
             </div>
 
@@ -1923,41 +2024,63 @@ export default function App() {
             )}
 
             {pendingTasks.length > 0 ? (
-              <div style={styles.pendingCard}>
-                <div style={styles.pendingHeader}>
-                  <div>
-                    <p style={styles.pendingEyebrow}>Pending Tasks</p>
-                    <h3 style={styles.pendingTitle}>Full pending backlog</h3>
-                  </div>
-                  <span style={styles.pendingCount}>{pendingTasks.length} pending</span>
+              <div style={styles.upcomingSection}>
+                <div style={styles.upcomingDivider}>
+                  <span style={styles.upcomingDividerLine} />
+                  <span style={styles.upcomingDividerLabel}>Upcoming days</span>
+                  <span style={styles.upcomingDividerLine} />
                 </div>
-                <div style={styles.pendingList}>
-                  {pendingDayGroups.map((group) => (
-                    <div key={group.dayTitle} style={styles.pendingItem}>
-                      <div style={styles.pendingItemHeader}>
-                        <p style={styles.pendingItemDay}>{group.dayTitle}</p>
-                        <span style={styles.pendingItemCount}>{group.taskCount} tasks</span>
+
+                <button
+                  type="button"
+                  onClick={() => setShowUpcomingDays((current) => !current)}
+                  style={styles.upcomingToggleButton}
+                >
+                  {showUpcomingDays ? "Hide full backlog" : "See full pending backlog"}
+                  <span style={styles.upcomingToggleMeta}>
+                    {pendingTasks.length} pending across {pendingDayGroups.length} day
+                    {pendingDayGroups.length === 1 ? "" : "s"}
+                  </span>
+                </button>
+
+                {showUpcomingDays ? (
+                  <div style={styles.pendingCard}>
+                    <div style={styles.pendingHeader}>
+                      <div>
+                        <p style={styles.pendingEyebrow}>Pending Tasks</p>
+                        <h3 style={styles.pendingTitle}>Full pending backlog</h3>
                       </div>
-                      <div style={styles.pendingSectionList}>
-                        {group.sections.map((section) => (
-                          <div key={`${group.dayTitle}-${section.title}`} style={styles.pendingSection}>
-                            <p style={styles.pendingItemSection}>{section.title}</p>
-                            <ul style={styles.pendingTaskList}>
-                              {section.tasks.map((task) => (
-                                <li
-                                  key={`${group.dayTitle}-${section.title}-${task}`}
-                                  style={styles.pendingTaskBullet}
-                                >
-                                  {task}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
+                      <span style={styles.pendingCount}>{pendingTasks.length} pending</span>
                     </div>
-                  ))}
-                </div>
+                    <div style={styles.pendingList}>
+                      {pendingDayGroups.map((group) => (
+                        <div key={group.dayTitle} style={styles.pendingItem}>
+                          <div style={styles.pendingItemHeader}>
+                            <p style={styles.pendingItemDay}>{group.dayTitle}</p>
+                            <span style={styles.pendingItemCount}>{group.taskCount} tasks</span>
+                          </div>
+                          <div style={styles.pendingSectionList}>
+                            {group.sections.map((section) => (
+                              <div key={`${group.dayTitle}-${section.title}`} style={styles.pendingSection}>
+                                <p style={styles.pendingItemSection}>{section.title}</p>
+                                <ul style={styles.pendingTaskList}>
+                                  {section.tasks.map((task) => (
+                                    <li
+                                      key={`${group.dayTitle}-${section.title}-${task}`}
+                                      style={styles.pendingTaskBullet}
+                                    >
+                                      {task}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </section>
@@ -2743,6 +2866,33 @@ const styles = {
     color: "#cbd5e1",
     lineHeight: 1.6,
   },
+  progressBacklogLabel: {
+    margin: "6px 0 0",
+    color: "#64748b",
+    fontSize: "0.85rem",
+    lineHeight: 1.45,
+  },
+  checkInTag: {
+    width: "fit-content",
+    padding: "6px 10px",
+    borderRadius: "999px",
+    fontSize: "0.74rem",
+    fontWeight: 800,
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+  },
+  checkInTagStrong: {
+    background: "rgba(34, 197, 94, 0.12)",
+    color: "#86efac",
+  },
+  checkInTagSolid: {
+    background: "rgba(45, 212, 191, 0.12)",
+    color: "#5eead4",
+  },
+  checkInTagShort: {
+    background: "rgba(250, 204, 21, 0.12)",
+    color: "#fde68a",
+  },
   recoveryCard: {
     marginBottom: "18px",
     padding: "20px",
@@ -3003,8 +3153,51 @@ const styles = {
     fontWeight: 700,
     textDecoration: "none",
   },
-  pendingCard: {
+  upcomingSection: {
     marginTop: "18px",
+    display: "grid",
+    gap: "12px",
+  },
+  upcomingDivider: {
+    display: "grid",
+    gridTemplateColumns: "1fr auto 1fr",
+    alignItems: "center",
+    gap: "12px",
+  },
+  upcomingDividerLine: {
+    height: "1px",
+    background: "rgba(148, 163, 184, 0.2)",
+  },
+  upcomingDividerLabel: {
+    color: "#94a3b8",
+    fontSize: "0.76rem",
+    fontWeight: 800,
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  upcomingToggleButton: {
+    width: "100%",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    padding: "14px 16px",
+    borderRadius: "16px",
+    border: "1px solid rgba(148, 163, 184, 0.18)",
+    background: "rgba(15, 23, 42, 0.72)",
+    color: "#f8fafc",
+    fontWeight: 800,
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  upcomingToggleMeta: {
+    color: "#94a3b8",
+    fontSize: "0.84rem",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
+  pendingCard: {
+    marginTop: "14px",
     padding: "20px",
     borderRadius: "20px",
     background: "rgba(15, 23, 42, 0.78)",
