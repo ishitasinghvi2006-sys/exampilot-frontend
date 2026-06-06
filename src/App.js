@@ -95,7 +95,7 @@ function Auth() {
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: "http://localhost:3000",
+        emailRedirectTo: "https://exampilot-frontend-delta.vercel.app",
         data: { name, phone },
       },
     });
