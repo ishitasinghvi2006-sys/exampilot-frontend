@@ -966,6 +966,13 @@ export default function App() {
       const studyHours = Number(formData.studyHours);
       if (!syllabus || !formData.examDate || !studyHours) throw new Error("Please fill in syllabus, exam date, and study hours.");
       const payload = { examType: formData.examType, syllabus, examDate: formData.examDate, studyHours, hoursPerDay: studyHours, studyHoursPerDay: studyHours };
+      if (!syllabus || !formData.examDate || !studyHours) throw new Error("Please fill in syllabus, exam date, and study hours.");
+      const selectedDate = new Date(`${formData.examDate}T00:00:00`);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        throw new Error("Exam date must be today or a future date. Please check your selection.");
+      }
       const data = await requestPlan(payload, session?.access_token);
       const rawFullPlan = data.fullPlan || data.full_plan || data.plan || data.studyPlan || data.study_plan || data.result || data.output || "";
       const fullPlan = normalizePlan(rawFullPlan);
