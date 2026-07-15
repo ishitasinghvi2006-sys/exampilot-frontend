@@ -788,7 +788,18 @@ async function requestPlan(payload, token) {
         },
         body: JSON.stringify(payload),
       });
-      // ...rest stays the same
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        lastError = new Error(data.error || data.message || `Plan generation failed with status ${response.status}.`);
+        continue;
+      }
+      return data;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Something went wrong while generating the plan.");
+    }
+  }
+  throw lastError;
+}
 
 // ─── Plan Card ──────────────────────────────────────────────────────────────────
 function PlanCard({ item, highlight, planKey, progressMap, onToggleTask }) {
