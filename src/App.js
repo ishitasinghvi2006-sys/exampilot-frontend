@@ -1137,6 +1137,7 @@ export default function App() {
                   <option value="NEET">NEET</option>
                   <option value="UPSC">UPSC</option>
                   <option value="College Exams">College Exams</option>
+                  <option value="School/Board Exams">School/Board Exams</option>
                 </select>
               </label>
               <label style={styles.label}>
