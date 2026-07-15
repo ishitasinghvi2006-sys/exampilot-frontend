@@ -775,21 +775,20 @@ function normalizeTodayPlan(rawTodayPlan, fallbackFullPlan) {
   return fallbackFullPlan[0] || null;
 }
 
-async function requestPlan(payload) {
+async function requestPlan(payload, token) {
   const endpoints = buildApiCandidates();
   let lastError = new Error("Unable to connect to ExamPilot right now.");
   for (const endpoint of endpoints) {
     try {
-      const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) { lastError = new Error(data.error || data.message || `Plan generation failed with status ${response.status}.`); continue; }
-      return data;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error("Something went wrong while generating the plan.");
-    }
-  }
-  throw lastError;
-}
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      // ...rest stays the same
 
 // ─── Plan Card ──────────────────────────────────────────────────────────────────
 function PlanCard({ item, highlight, planKey, progressMap, onToggleTask }) {
@@ -956,7 +955,7 @@ export default function App() {
       const studyHours = Number(formData.studyHours);
       if (!syllabus || !formData.examDate || !studyHours) throw new Error("Please fill in syllabus, exam date, and study hours.");
       const payload = { examType: formData.examType, syllabus, examDate: formData.examDate, studyHours, hoursPerDay: studyHours, studyHoursPerDay: studyHours };
-      const data = await requestPlan(payload);
+      const data = await requestPlan(payload, session?.access_token);
       const rawFullPlan = data.fullPlan || data.full_plan || data.plan || data.studyPlan || data.study_plan || data.result || data.output || "";
       const fullPlan = normalizePlan(rawFullPlan);
       const todayPlanData = normalizeTodayPlan(data.todayPlan || data.today_plan || data.today || data.todayStudyPlan, fullPlan);
