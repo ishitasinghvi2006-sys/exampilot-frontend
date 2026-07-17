@@ -4,7 +4,9 @@ import { createClient } from "@supabase/supabase-js";
 // ─── Supabase Client ───────────────────────────────────────────────────────────
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: { flowType: "pkce" },
+});
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const FREE_PREVIEW_DAYS = 2;
@@ -868,14 +870,12 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-  // Handle magic link token in URL
-  if (window.location.hash && window.location.hash.includes('access_token')) {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setSession(session);
-        // Clean up URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get("code");
+  if (code) {
+    supabase.auth.exchangeCodeForSession(code).then(({ data }) => {
+      if (data?.session) setSession(data.session);
+      window.history.replaceState({}, document.title, window.location.pathname);
     });
   }
 
@@ -891,7 +891,6 @@ export default function App() {
 
   return () => subscription.unsubscribe();
 }, []);
-
   // ── App state ──
   const savedSession = loadStoredPlanSession();
   const resultRef = useRef(null);
