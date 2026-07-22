@@ -1099,7 +1099,7 @@ export default function App() {
     if (session?.user?.id && todayConfidence > 0 && todayConfidence < 5 && todayPlan) {
       supabase.from("weak_topics").insert({
         user_id: session.user.id,
-        topic: todayPlan.title || "General",
+        topic: (todayPlan.sections && todayPlan.sections[0]?.tasks[0]) || (todayPlan.tasks && todayPlan.tasks[0]) || "General",
         subject: resultMeta?.examType || formData.examType,
         confidence_score: todayConfidence,
         flagged_at: new Date().toISOString(),
