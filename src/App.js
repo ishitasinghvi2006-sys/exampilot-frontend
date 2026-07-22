@@ -1095,6 +1095,16 @@ export default function App() {
   function handleReflectionSubmit() {
     if (!hasCompletedReflection) return;
     setReflectionSubmitted(true);
+
+    if (session?.user?.id && todayConfidence > 0 && todayConfidence < 5 && todayPlan) {
+      supabase.from("weak_topics").insert({
+        user_id: session.user.id,
+        topic: todayPlan.title || "General",
+        subject: resultMeta?.examType || formData.examType,
+        confidence_score: todayConfidence,
+        flagged_at: new Date().toISOString(),
+      }).then(({ error }) => { if (error) console.error("Weak topic save error:", error); });
+    }
   }
 
   // ── Loading screen ──
