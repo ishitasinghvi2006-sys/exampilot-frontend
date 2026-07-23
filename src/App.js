@@ -966,7 +966,7 @@ export default function App() {
       const syllabus = formData.syllabus.trim();
       const studyHours = Number(formData.studyHours);
       if (!syllabus || !formData.examDate || !studyHours) throw new Error("Please fill in syllabus, exam date, and study hours.");
-      const payload = { examType: formData.examType, syllabus, examDate: formData.examDate, studyHours, hoursPerDay: studyHours, studyHoursPerDay: studyHours };
+      const payload = { examType: formData.examType, syllabus, examDate: formData.examDate, studyHours, hoursPerDay: studyHours, studyHoursPerDay: studyHours, ...extra };
       if (!syllabus || !formData.examDate || !studyHours) throw new Error("Please fill in syllabus, exam date, and study hours.");
       const selectedDate = new Date(`${formData.examDate}T00:00:00`);
       const today = new Date();
@@ -1107,6 +1107,17 @@ export default function App() {
       flagged_at: new Date().toISOString(),
     }).then(({ error }) => { if (error) console.error("Weak topic save error:", error); });
   }
+}
+function handleRegenerateWithWeakTopics() {
+  const completedSummary = buildCompletedSummary();
+  const confirmed = window.confirm(`${result.daysLeft} day(s) left until your exam, ${formData.studyHours} hrs/day. Your plan will be rebuilt for the remaining time — topics you've already completed won't be repeated. Continue?`);
+  if (!confirmed) return;
+  handleSubmit({ preventDefault: () => {} }, { completedSummary });
+}
+  function buildCompletedSummary() {
+  const allTasks = collectPlanTasks(trackablePlanItems, result.planKey);
+  const done = allTasks.filter((t) => progressMap[t.id]).map((t) => t.task);
+  return uniqueLines(done).join(", ");
 }
 
   // ── Loading screen ──
@@ -1351,6 +1362,10 @@ export default function App() {
                         <p style={styles.adaptiveBody}>{adaptiveGuidance.body}</p>
                         {learningReflection.otherIssue ? <p style={styles.adaptiveBody}>You also mentioned: {learningReflection.otherIssue}</p> : null}
                         <p style={styles.adaptiveAction}>{adaptiveGuidance.action}</p>
+                        <button type="button" onClick={handleRegenerateWithWeakTopics} style={styles.followUpSubmitButton}>
+                          Update my full plan with this
+                        </button>
+                        <p style={styles.followUpHint}>This rebuilds your plan for your remaining days, skipping what you've already completed.</p>
                       </div>
                     ) : (
                       <p style={styles.followUpHint}>Complete all 3 answers, then click "Analyze my difficulty" to unlock your next-step recommendation.</p>
