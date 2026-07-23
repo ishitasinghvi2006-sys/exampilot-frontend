@@ -958,7 +958,7 @@ export default function App() {
   useEffect(() => { setTodayConfidence(loadStoredConfidence(result.planKey)); }, [result.planKey]);
   useEffect(() => { setLearningReflection(loadStoredReflection(result.planKey)); setReflectionSubmitted(false); }, [result.planKey]);
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event, extra = {}){
     event.preventDefault();
     setLoading(true);
     setError("");
