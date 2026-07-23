@@ -55,6 +55,7 @@ const EMPTY_REFLECTION = {
   practiceCount: "",
   supportNeed: "",
   otherIssue: "",
+  weakTask: "",       
 };
 const HARDEST_PART_OPTIONS = [
   { value: "concepts", label: "Concepts were unclear" },
@@ -496,11 +497,12 @@ function loadStoredReflection(planKey) {
     if (!rawValue) return EMPTY_REFLECTION;
     const parsedValue = JSON.parse(rawValue);
     return {
-      hardestPart: String(parsedValue?.hardestPart || ""),
-      practiceCount: String(parsedValue?.practiceCount || ""),
-      supportNeed: String(parsedValue?.supportNeed || ""),
-      otherIssue: String(parsedValue?.otherIssue || ""),
-    };
+  hardestPart: String(parsedValue?.hardestPart || ""),
+  practiceCount: String(parsedValue?.practiceCount || ""),
+  supportNeed: String(parsedValue?.supportNeed || ""),
+  otherIssue: String(parsedValue?.otherIssue || ""),
+  weakTask: String(parsedValue?.weakTask || ""),   // ← add this line
+  };
   } catch (error) {
     return EMPTY_REFLECTION;
   }
@@ -944,7 +946,7 @@ export default function App() {
   const rewardProgressPercent = nextRewardMilestone ? Math.min(100, Math.round((streakCount / nextRewardMilestone.days) * 100)) : 100;
   const confidenceLabel = todayConfidence <= 0 ? "Not rated yet" : todayConfidence <= 2 ? "Needs revision" : todayConfidence === 3 ? "Moderate understanding" : "Strong understanding";
   const confidenceCopy = todayConfidence <= 0 ? "After finishing today's tasks, rate your confidence so ExamPilot can start understanding what feels weak or strong." : todayConfidence <= 2 ? "Low confidence signal detected. Revisit today's key topics and practice again before moving ahead." : todayConfidence === 3 ? "You are partly confident. One more revision or practice round should strengthen this topic." : "Strong confidence signal detected. You can move ahead, and later ExamPilot can reduce extra revision on strong topics.";
-  const hasCompletedReflection = Boolean(learningReflection.hardestPart) && Boolean(learningReflection.practiceCount) && Boolean(learningReflection.supportNeed);
+  const hasCompletedReflection = Boolean(learningReflection.hardestPart) && Boolean(learningReflection.practiceCount) && Boolean(learningReflection.supportNeed) && Boolean(learningReflection.weakTask);
   const needsFollowUpQuestions = todayConfidence > 0 && todayConfidence < 5;
   const canRateConfidence = hasCheckedInToday || completedTodayTaskCount > 0;
   const adaptiveGuidance = buildAdaptiveGuidance(todayConfidence, learningReflection);
@@ -1093,19 +1095,19 @@ export default function App() {
   }
 
   function handleReflectionSubmit() {
-    if (!hasCompletedReflection) return;
-    setReflectionSubmitted(true);
+  if (!hasCompletedReflection || reflectionSubmitted) return;   // ← added reflectionSubmitted guard
+  setReflectionSubmitted(true);
 
-    if (session?.user?.id && todayConfidence > 0 && todayConfidence < 5 && todayPlan) {
-      supabase.from("weak_topics").insert({
-        user_id: session.user.id,
-        topic: (todayPlan.sections && todayPlan.sections[0]?.tasks[0]) || (todayPlan.tasks && todayPlan.tasks[0]) || "General",
-        subject: resultMeta?.examType || formData.examType,
-        confidence_score: todayConfidence,
-        flagged_at: new Date().toISOString(),
-      }).then(({ error }) => { if (error) console.error("Weak topic save error:", error); });
-    }
+  if (session?.user?.id && todayConfidence > 0 && todayConfidence < 5 && todayPlan) {
+    supabase.from("weak_topics").insert({
+      user_id: session.user.id,
+      topic: learningReflection.weakTask || "General",   // ← changed from sections[0]/tasks[0]
+      subject: resultMeta?.examType || formData.examType,
+      confidence_score: todayConfidence,
+      flagged_at: new Date().toISOString(),
+    }).then(({ error }) => { if (error) console.error("Weak topic save error:", error); });
   }
+}
 
   // ── Loading screen ──
   if (authLoading) {
@@ -1333,13 +1335,14 @@ export default function App() {
                       <ReflectionOptionGroup label="What felt hardest?" value={learningReflection.hardestPart} options={HARDEST_PART_OPTIONS} onSelect={(v) => handleReflectionChange("hardestPart", v)} />
                       <ReflectionOptionGroup label="How much practice did you do?" value={learningReflection.practiceCount} options={PRACTICE_COUNT_OPTIONS} onSelect={(v) => handleReflectionChange("practiceCount", v)} />
                       <ReflectionOptionGroup label="What support do you need next?" value={learningReflection.supportNeed} options={SUPPORT_NEED_OPTIONS} onSelect={(v) => handleReflectionChange("supportNeed", v)} />
+                      <ReflectionOptionGroup label="Which specific task was this about?" value={learningReflection.weakTask} options={todayPlanTasks.map((t) => ({ value: t.task, label: t.task }))} onSelect={(v) => handleReflectionChange("weakTask", v)} />
                     </div>
                     <label style={styles.followUpField}>
                       <p style={styles.followUpQuestion}>Anything else happened? (optional)</p>
                       <textarea value={learningReflection.otherIssue} onChange={(event) => handleReflectionChange("otherIssue", event.target.value)} placeholder="Example: Faculty jumped too fast, I got distracted, questions were from a different pattern..." rows={3} style={styles.followUpTextarea} />
                     </label>
                     <div style={styles.followUpActions}>
-                      <button type="button" onClick={handleReflectionSubmit} disabled={!hasCompletedReflection} style={{ ...styles.followUpSubmitButton, ...(!hasCompletedReflection ? styles.followUpSubmitButtonDisabled : {}) }}>Analyze my difficulty</button>
+                      <button type="button" onClick={handleReflectionSubmit} disabled={!hasCompletedReflection || reflectionSubmitted} style={{ ...styles.followUpSubmitButton, ...(!hasCompletedReflection || reflectionSubmitted ? styles.followUpSubmitButtonDisabled : {}) }}>Analyze my difficulty</button>
                     </div>
                     {hasCompletedReflection && reflectionSubmitted ? (
                       <div style={styles.adaptiveCard}>
