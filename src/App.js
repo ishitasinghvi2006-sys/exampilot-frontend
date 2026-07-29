@@ -911,8 +911,9 @@ export default function App() {
   const [progressMap, setProgressMap] = useState(loadStoredProgress(""));
   const [showUpcomingDays, setShowUpcomingDays] = useState(false);
 
-  // ── BETA: full access for all users ──
-  const IS_BETA = true;
+  // ── BETA: free access only for accounts created before the cutoff ──
+  const BETA_CUTOFF_DATE = "2026-07-29T00:00:00Z";
+  const IS_BETA = Boolean(session?.user?.created_at) && new Date(session.user.created_at) < new Date(BETA_CUTOFF_DATE);
 
   const previewPlan = result.fullPlan.slice(0, FREE_PREVIEW_DAYS);
   const hiddenDayCount = Math.max(result.fullPlan.length - FREE_PREVIEW_DAYS, 0);
@@ -1422,19 +1423,40 @@ function handleRegenerateWithWeakTopics() {
               ) : (
                 <p style={styles.emptyCopy}>Today&apos;s plan is not available yet.</p>
               )
-            ) : (
-              <>
-                <div style={styles.previewHeader}>
-                  <p style={styles.previewTitle}>Full Plan — Beta Unlocked</p>
-                  <p style={styles.previewMeta}>All {result.fullPlan.length} days visible</p>
-                </div>
-                <div style={styles.planStack}>
-                  {result.fullPlan.map((item) => (
-                    <PlanCard key={item.id} item={item} planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} />
-                  ))}
-                </div>
-              </>
-            )}
+            ) : hasFullPlanAccess ? (
+  <>
+    <div style={styles.previewHeader}>
+      <p style={styles.previewTitle}>Full Plan</p>
+      <p style={styles.previewMeta}>All {result.fullPlan.length} days visible</p>
+    </div>
+    <div style={styles.planStack}>
+      {result.fullPlan.map((item) => (
+        <PlanCard key={item.id} item={item} planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} />
+      ))}
+    </div>
+  </>
+) : (
+  <>
+    <div style={styles.previewHeader}>
+      <p style={styles.previewTitle}>Preview — {previewPlan.length} of {result.fullPlan.length} days</p>
+      <p style={styles.previewMeta}>{hiddenDayCount} more day{hiddenDayCount === 1 ? "" : "s"} locked</p>
+    </div>
+    <div style={styles.planStack}>
+      {previewPlan.map((item) => (
+        <PlanCard key={item.id} item={item} planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} />
+      ))}
+    </div>
+    <div style={styles.resumeCard}>
+      <h3 style={styles.resumeTitle}>Unlock your full {result.fullPlan.length}-day plan</h3>
+      <p style={styles.resumeCopy}>Pay ₹{PAYMENT_AMOUNT} via UPI, then send your screenshot on WhatsApp to unlock.</p>
+      <img src={buildQrImageUrl()} alt="UPI QR code" style={{ width: "160px", borderRadius: "12px" }} />
+      <div style={styles.resumeActions}>
+        <a href={buildUpiPaymentLink()} style={styles.resumePrimaryButton}>Pay ₹{PAYMENT_AMOUNT} via UPI</a>
+        <a href={buildWhatsAppLink()} target="_blank" rel="noreferrer" style={styles.resumeSecondaryButton}>Send payment screenshot</a>
+      </div>
+    </div>
+  </>
+)}
 
             {pendingTasks.length > 0 ? (
               <div style={styles.upcomingSection}>
