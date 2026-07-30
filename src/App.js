@@ -124,7 +124,7 @@ function Auth() {
             Click the link in your email to log in. You can close this tab.
           </p>
           <p style={authStyles.betaNote}>
-            🎉 Free during beta — full plan unlocked for all early users.
+            🎉 Get your first study plan free — see exactly how it works.
           </p>
           <button
             style={{ ...authStyles.button, background: "transparent", border: "1px solid rgba(255,255,255,0.1)", marginTop: "8px" }}
@@ -174,7 +174,7 @@ function Auth() {
             {loading ? "Sending link..." : "Get Started Free →"}
           </button>
           <p style={authStyles.betaNote}>
-            🎉 Free during beta — full plan unlocked for all early users.
+            🎉 Get your first study plan free — see exactly how it works.
           </p>
         </div>
         {message && <p style={authStyles.message}>{message}</p>}
@@ -1146,11 +1146,13 @@ function handleRegenerateWithWeakTopics() {
             Turn a stressful syllabus into a daily action plan built around your exam date and available study hours.
           </p>
           {/* Beta Banner */}
-          <div style={{ marginTop: "16px", padding: "12px 16px", borderRadius: "12px", background: "rgba(45,212,191,0.1)", border: "1px solid rgba(45,212,191,0.25)" }}>
-            <p style={{ margin: 0, color: "#5eead4", fontSize: "14px", lineHeight: 1.5 }}>
-              🎉 <strong>Beta access — full plan unlocked for free.</strong> You are one of our early users. All features are free right now. We will notify you before anything changes.
-            </p>
-          </div>
+          {IS_BETA ? (
+            <div style={{ marginTop: "16px", padding: "12px 16px", borderRadius: "12px", background: "rgba(45,212,191,0.1)", border: "1px solid rgba(45,212,191,0.25)" }}>
+              <p style={{ margin: 0, color: "#5eead4", fontSize: "14px", lineHeight: 1.5 }}>
+                🎉 <strong>Beta access — full plan unlocked for free.</strong> You are one of our early users. All features are free right now. We will notify you before anything changes.
+              </p>
+            </div>
+          ) : null}
         </section>
 
         <section style={styles.panel}>
@@ -1244,7 +1246,7 @@ function handleRegenerateWithWeakTopics() {
               <div style={styles.statCard}><span style={styles.statLabel}>Exam Type</span><strong style={styles.statValue}>{resultMeta?.examType || formData.examType}</strong></div>
               <div style={styles.statCard}><span style={styles.statLabel}>Study Hours</span><strong style={styles.statValue}>{resultMeta?.studyHours || formData.studyHours}/day</strong></div>
               <div style={styles.statCard}><span style={styles.statLabel}>Days Left</span><strong style={styles.statValue}>{result.daysLeft !== null ? result.daysLeft : "Calculated in plan"}</strong></div>
-              <div style={styles.statCard}><span style={styles.statLabel}>Access</span><strong style={styles.statValue} style={{ color: "#5eead4" }}>Beta — Full Free</strong></div>
+              <div style={styles.statCard}><span style={styles.statLabel}>Access</span><strong style={{ ...styles.statValue, color: hasFullPlanAccess ? "#5eead4" : "#fde68a" }}>{hasFullPlanAccess ? "Full Access" : "Preview Mode"}</strong></div>
             </div>
 
             <div style={styles.accountabilityCard}>
