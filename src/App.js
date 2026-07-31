@@ -901,7 +901,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [founderMode] = useState(getFounderMode);
-  const [planUsageCount, setPlanUsageCount] = useState(getStoredPlanUsageCount);
+  const [planUsageCount, setPlanUsageCount] = useState(0);
+  const [isPaid, setIsPaid] = useState(false);
   const [dailyCheckIn, setDailyCheckIn] = useState(loadDailyCheckIn);
   const [todayConfidence, setTodayConfidence] = useState(0);
   const [learningReflection, setLearningReflection] = useState(EMPTY_REFLECTION);
@@ -911,10 +912,7 @@ export default function App() {
   const [progressMap, setProgressMap] = useState(loadStoredProgress(""));
   const [showUpcomingDays, setShowUpcomingDays] = useState(false);
 
-  // ── BETA: free access only for accounts created before the cutoff ──
-  const BETA_CUTOFF_DATE = "2026-07-29T00:00:00Z";
-  const IS_BETA = Boolean(session?.user?.created_at) && new Date(session.user.created_at) < new Date(BETA_CUTOFF_DATE);
-
+  
   const previewPlan = result.fullPlan.slice(0, FREE_PREVIEW_DAYS);
   const hiddenDayCount = Math.max(result.fullPlan.length - FREE_PREVIEW_DAYS, 0);
   const hasPlan = result.fullPlan.length > 0 || Boolean(result.todayPlan);
@@ -922,7 +920,7 @@ export default function App() {
   const todayPlan = result.todayPlan || result.fullPlan[0] || null;
   const resultMeta = result.meta || null;
   const freeFullPlansLeft = Math.max(FREE_FULL_PLAN_LIMIT - planUsageCount, 0);
-  const hasFullPlanAccess = IS_BETA || founderMode || (planUsageCount > 0 && planUsageCount <= FREE_FULL_PLAN_LIMIT);
+  const hasFullPlanAccess = founderMode || isPaid || (planUsageCount > 0 && planUsageCount <= FREE_FULL_PLAN_LIMIT);
   const trackablePlanItems = hasFullPlanAccess ? result.fullPlan : previewPlan;
   const allPlanTasks = collectPlanTasks(trackablePlanItems, result.planKey);
   const totalTaskCount = allPlanTasks.length;
@@ -958,6 +956,13 @@ export default function App() {
   useEffect(() => { setProgressMap(loadStoredProgress(result.planKey)); }, [result.planKey]);
   useEffect(() => { setTodayConfidence(loadStoredConfidence(result.planKey)); }, [result.planKey]);
   useEffect(() => { setLearningReflection(loadStoredReflection(result.planKey)); setReflectionSubmitted(false); }, [result.planKey]);
+  useEffect(() => {
+  if (!session?.user?.id) { setPlanUsageCount(0); setIsPaid(false); return; }
+  supabase.from("plans").select("id", { count: "exact", head: true }).eq("user_id", session.user.id)
+    .then(({ count }) => setPlanUsageCount(count || 0));
+  supabase.from("profiles").select("is_paid").eq("id", session.user.id).single()
+    .then(({ data }) => setIsPaid(Boolean(data?.is_paid)));
+  }, [session?.user?.id]);
 
   async function handleSubmit(event, extra = {}){
     event.preventDefault();
@@ -997,7 +1002,7 @@ export default function App() {
         }).then(({ error }) => { if (error) console.error("Supabase save error:", error); });
       }
 
-      setPlanUsageCount(nextUsageCount);
+      setPlanUsageCount((current) => current + 1);
       storePlanUsageCount(nextUsageCount);
       setFormData(normalizedFormData);
       setResult(nextResult);
@@ -1145,14 +1150,11 @@ function handleRegenerateWithWeakTopics() {
           <p style={styles.heroSubtitle}>
             Turn a stressful syllabus into a daily action plan built around your exam date and available study hours.
           </p>
-          {/* Beta Banner */}
-          {IS_BETA ? (
-            <div style={{ marginTop: "16px", padding: "12px 16px", borderRadius: "12px", background: "rgba(45,212,191,0.1)", border: "1px solid rgba(45,212,191,0.25)" }}>
-              <p style={{ margin: 0, color: "#5eead4", fontSize: "14px", lineHeight: 1.5 }}>
-                🎉 <strong>Beta access — full plan unlocked for free.</strong> You are one of our early users. All features are free right now. We will notify you before anything changes.
-              </p>
-            </div>
-          ) : null}
+          <div style={{ marginTop: "16px", padding: "12px 16px", borderRadius: "12px", background: "rgba(45,212,191,0.1)", border: "1px solid rgba(45,212,191,0.25)" }}>
+            <p style={{ margin: 0, color: "#5eead4", fontSize: "14px", lineHeight: 1.5 }}>
+              🎉 Your first {FREE_FULL_PLAN_LIMIT} plans are free. After that, unlock full access for ₹{PAYMENT_AMOUNT}.
+            </p>
+          </div>
         </section>
 
         <section style={styles.panel}>
