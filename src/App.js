@@ -924,6 +924,7 @@ export default function App() {
   const [result, setResult] = useState(EMPTY_RESULT);
   const [progressMap, setProgressMap] = useState(loadStoredProgress(""));
   const [showUpcomingDays, setShowUpcomingDays] = useState(false);
+  const [serverPlanRowId, setServerPlanRowId] = useState(null);
 
   
   const previewPlan = result.fullPlan.slice(0, FREE_PREVIEW_DAYS);
@@ -981,6 +982,29 @@ export default function App() {
   supabase.from("profiles").select("is_paid").eq("id", session.user.id).single()
     .then(({ data }) => setIsPaid(Boolean(data?.is_paid)));
   }, [session?.user?.id]);
+  useEffect(() => {
+  if (!session?.user?.id) return;
+  if (resumeSession?.result?.planKey || hasPlan) return;
+  supabase.from("plans")
+    .select("id, exam_type, exam_date, hours_per_day, syllabus, plan_json, progress_json, created_at")
+    .eq("user_id", session.user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .then(({ data, error }) => {
+      if (error || !data || !data.length) return;
+      const row = data[0];
+      const serverResult = row.plan_json;
+      if (!serverResult?.planKey) return;
+      const nextSession = {
+        result: serverResult,
+        formData: { examType: row.exam_type, syllabus: row.syllabus, examDate: row.exam_date, studyHours: String(row.hours_per_day) },
+        planRowId: row.id,
+        progressJson: row.progress_json || null,
+      };
+      setResumeSession(nextSession);
+      storePlanSession(nextSession);
+    });
+}, [session?.user?.id]);
 
   async function handleSubmit(event, extra = {}){
     event.preventDefault();
@@ -1008,23 +1032,27 @@ export default function App() {
       const planKey = buildPlanKey({ examType: normalizedFormData.examType, examDate: normalizedFormData.examDate, studyHours: normalizedFormData.studyHours, fullPlan });
       const nextResult = { fullPlan, todayPlan: todayPlanData, daysLeft: typeof data.daysLeft === "number" ? data.daysLeft : null, planKey, meta: { examType: normalizedFormData.examType, examDate: normalizedFormData.examDate, studyHours: normalizedFormData.studyHours, generatedOn: getISTDateKey() } };
 
-      // Save plan to Supabase if user is logged in
+      // Save plan to Supabase if user is logged in, and capture its row id for cross-device sync
+      let insertedPlanId = null;
       if (session?.user?.id) {
-        supabase.from("plans").insert({
+        const { data: insertedRow, error: insertError } = await supabase.from("plans").insert({
           user_id: session.user.id,
           exam_type: normalizedFormData.examType,
           exam_date: normalizedFormData.examDate,
           hours_per_day: Number(normalizedFormData.studyHours),
           syllabus: normalizedFormData.syllabus,
           plan_json: nextResult,
-        }).then(({ error }) => { if (error) console.error("Supabase save error:", error); });
+        }).select().single();
+        if (insertError) console.error("Supabase save error:", insertError);
+        else insertedPlanId = insertedRow.id;
       }
 
+      setServerPlanRowId(insertedPlanId);
       setPlanUsageCount((current) => current + 1);
       storePlanUsageCount(nextUsageCount);
       setFormData(normalizedFormData);
       setResult(nextResult);
-      const nextSession = { result: nextResult, formData: normalizedFormData };
+      const nextSession = { result: nextResult, formData: normalizedFormData, planRowId: insertedPlanId };
       setResumeSession(nextSession);
       storePlanSession(nextSession);
       setViewMode("today");
@@ -1051,10 +1079,16 @@ export default function App() {
   if (!resumeSession?.result) return;
   setResult(resumeSession.result);
   if (resumeSession.formData) setFormData(resumeSession.formData);
-  setProgressMap(loadStoredProgress(resumeSession.result.planKey));
+  setServerPlanRowId(resumeSession.planRowId || null);
+  if (resumeSession.progressJson) {
+    setProgressMap(resumeSession.progressJson);
+    storeProgress(resumeSession.result.planKey, resumeSession.progressJson);
+  } else {
+    setProgressMap(loadStoredProgress(resumeSession.result.planKey));
+  }
   setViewMode("today"); setShowUpcomingDays(false);
   setTimeout(() => { resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120);
-  }
+}
   function handleStartFresh() {
     setResumeSession(null); clearStoredPlanSession(); setResult(EMPTY_RESULT);
     setFormData(DEFAULT_FORM_DATA); setProgressMap({}); setViewMode("today");
@@ -1062,11 +1096,15 @@ export default function App() {
   }
 
   function handleToggleTask(taskId) {
-    setProgressMap((current) => {
-      const next = { ...current, [taskId]: !current[taskId] };
-      storeProgress(result.planKey, next);
-      return next;
-    });
+  setProgressMap((current) => {
+    const next = { ...current, [taskId]: !current[taskId] };
+    storeProgress(result.planKey, next);
+    if (serverPlanRowId) {
+      supabase.from("plans").update({ progress_json: next }).eq("id", serverPlanRowId)
+        .then(({ error }) => { if (error) console.error("Progress sync error:", error); });
+    }
+    return next;
+  });
   }
 
   function handleDailyCheckIn() {
