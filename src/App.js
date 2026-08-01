@@ -530,6 +530,19 @@ function getYesterdayISTDateKey() {
   return getISTDateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
 }
 
+function addDaysToDateKey(dateKey, days) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day + days));
+  return `${utcDate.getUTCFullYear()}-${String(utcDate.getUTCMonth() + 1).padStart(2, "0")}-${String(utcDate.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getTaskCalendarDate(dayLabel, generatedOn) {
+  if (!generatedOn) return null;
+  const dayNumber = extractDaySortValue(dayLabel);
+  if (dayNumber === Number.MAX_SAFE_INTEGER) return null;
+  return addDaysToDateKey(generatedOn, dayNumber - 1);
+}
+
 function loadDailyCheckIn() {
   if (typeof window === "undefined") {
     return { streakCount: 0, lastCheckInDate: "", completionPercent: 0, checkInQuality: "", completedTodayTasks: 0, totalTodayTasks: 0 };
@@ -926,6 +939,13 @@ export default function App() {
   const totalTaskCount = allPlanTasks.length;
   const pendingTasks = allPlanTasks.filter((task) => !progressMap[task.id]);
   const pendingDayGroups = buildPendingDayGroups(pendingTasks);
+  const todayDateKey = getISTDateKey();
+  const yesterdayDateKey = getYesterdayISTDateKey();
+  const missedTasks = pendingTasks.filter((task) => {
+  const taskDate = getTaskCalendarDate(task.itemTitle, resultMeta?.generatedOn);
+  return taskDate && taskDate < todayDateKey;
+  });
+  const missedDayTitles = [...new Set(missedTasks.map((t) => t.itemTitle))];
   const recoveryTaskLimit = Math.max(2, Math.min(5, Number(resultMeta?.studyHours || formData.studyHours) || 3));
   const priorityRecoveryTasks = pendingTasks.slice(0, recoveryTaskLimit);
   const isLowTimeMode = typeof result.daysLeft === "number" && result.daysLeft <= 3;
@@ -936,8 +956,6 @@ export default function App() {
   const todayProgressPercent = totalTodayTaskCount ? Math.round((completedTodayTaskCount / totalTodayTaskCount) * 100) : 0;
   const todayProgressLabel = completedTodayTaskCount === 0 ? "Ready to start" : `${completedTodayTaskCount} / ${totalTodayTaskCount} today`;
   const backlogLabel = totalTaskCount ? `${totalTaskCount} tasks across ${trackablePlanItems.length} day${trackablePlanItems.length === 1 ? "" : "s"}` : "";
-  const todayDateKey = getISTDateKey();
-  const yesterdayDateKey = getYesterdayISTDateKey();
   const hasCheckedInToday = dailyCheckIn.lastCheckInDate === todayDateKey;
   const streakCount = dailyCheckIn.lastCheckInDate === todayDateKey || dailyCheckIn.lastCheckInDate === yesterdayDateKey ? dailyCheckIn.streakCount : 0;
   const unlockedRewardCount = STREAK_REWARD_MILESTONES.filter((milestone) => streakCount >= milestone.days).length;
@@ -988,7 +1006,7 @@ export default function App() {
       const nextUsageCount = planUsageCount + 1;
       const normalizedFormData = { ...formData, syllabus, studyHours: String(studyHours) };
       const planKey = buildPlanKey({ examType: normalizedFormData.examType, examDate: normalizedFormData.examDate, studyHours: normalizedFormData.studyHours, fullPlan });
-      const nextResult = { fullPlan, todayPlan: todayPlanData, daysLeft: typeof data.daysLeft === "number" ? data.daysLeft : null, planKey, meta: { examType: normalizedFormData.examType, examDate: normalizedFormData.examDate, studyHours: normalizedFormData.studyHours } };
+      const nextResult = { fullPlan, todayPlan: todayPlanData, daysLeft: typeof data.daysLeft === "number" ? data.daysLeft : null, planKey, meta: { examType: normalizedFormData.examType, examDate: normalizedFormData.examDate, studyHours: normalizedFormData.studyHours, generatedOn: getISTDateKey() } };
 
       // Save plan to Supabase if user is logged in
       if (session?.user?.id) {
@@ -1394,7 +1412,20 @@ function handleRegenerateWithWeakTopics() {
                 {pendingTodayTaskCount > 0 ? `${pendingTodayTaskCount} task${pendingTodayTaskCount === 1 ? "" : "s"} left for today.` : totalTodayTaskCount > 0 ? "Today's tasks are completed." : "Generate a plan to start today's progress."}
               </p>
             </div>
-
+            {missedTasks.length > 0 ? (
+              <div style={styles.rebalanceCard}>
+                <p style={styles.rebalanceEyebrow}>No Stress</p>
+                <h3 style={styles.rebalanceTitle}>
+                  Looks like {missedDayTitles.length === 1 ? "a day" : `${missedDayTitles.length} days`} got away from you
+                </h3>
+                <p style={styles.rebalanceCopy}>
+                  {missedTasks.length} task{missedTasks.length === 1 ? "" : "s"} from {missedDayTitles.join(", ")} {missedTasks.length === 1 ? "is" : "are"} still pending. I can fit these into your remaining days without piling everything onto one.
+                </p>
+                <button type="button" onClick={handleRegenerateWithWeakTopics} style={styles.rebalanceButton}>
+                  Re-balance my plan
+                </button>
+            </div>
+            ) : null}
             {priorityRecoveryTasks.length > 0 ? (
               <div style={styles.recoveryCard}>
                 <div style={styles.recoveryHeader}>
@@ -1634,6 +1665,11 @@ const styles = {
   checkInTagSolid: { background: "rgba(45, 212, 191, 0.12)", color: "#5eead4" },
   checkInTagShort: { background: "rgba(250, 204, 21, 0.12)", color: "#fde68a" },
   recoveryCard: { marginBottom: "18px", padding: "20px", borderRadius: "20px", background: "rgba(25, 35, 58, 0.82)", border: "1px solid rgba(250, 204, 21, 0.18)" },
+  rebalanceCard: { marginBottom: "18px", padding: "20px", borderRadius: "20px", background: "rgba(30, 41, 59, 0.82)", border: "1px solid rgba(96, 165, 250, 0.22)" },
+  rebalanceEyebrow: { margin: 0, color: "#93c5fd", fontSize: "0.76rem", letterSpacing: "0.12em", textTransform: "uppercase" },
+  rebalanceTitle: { margin: "8px 0 0", fontSize: "1.12rem", lineHeight: 1.3 },
+  rebalanceCopy: { margin: "12px 0 16px", color: "#cbd5e1", lineHeight: 1.6 },
+  rebalanceButton: { border: "none", borderRadius: "14px", padding: "12px 20px", background: "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)", color: "#f8fafc", fontWeight: 700, cursor: "pointer" },
   recoveryHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" },
   recoveryEyebrow: { margin: 0, color: "#fcd34d", fontSize: "0.76rem", letterSpacing: "0.12em", textTransform: "uppercase" },
   recoveryTitle: { margin: "8px 0 0", fontSize: "1.12rem", lineHeight: 1.3 },
