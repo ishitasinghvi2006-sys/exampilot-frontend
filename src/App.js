@@ -1024,7 +1024,7 @@ export default function App() {
       storePlanUsageCount(nextUsageCount);
       setFormData(normalizedFormData);
       setResult(nextResult);
-      const nextSession = { result: nextResult };
+      const nextSession = { result: nextResult, formData: normalizedFormData };
       setResumeSession(nextSession);
       storePlanSession(nextSession);
       setViewMode("today");
@@ -1048,13 +1048,13 @@ export default function App() {
     setShowUpcomingDays(false); setError("");
   }
   function handleResumeLastPlan() {
-    if (!resumeSession?.result) return;
-    setResult(resumeSession.result);
-    setProgressMap(loadStoredProgress(resumeSession.result.planKey));
-    setViewMode("today"); setShowUpcomingDays(false);
-    setTimeout(() => { resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120);
+  if (!resumeSession?.result) return;
+  setResult(resumeSession.result);
+  if (resumeSession.formData) setFormData(resumeSession.formData);
+  setProgressMap(loadStoredProgress(resumeSession.result.planKey));
+  setViewMode("today"); setShowUpcomingDays(false);
+  setTimeout(() => { resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120);
   }
-
   function handleStartFresh() {
     setResumeSession(null); clearStoredPlanSession(); setResult(EMPTY_RESULT);
     setFormData(DEFAULT_FORM_DATA); setProgressMap({}); setViewMode("today");
