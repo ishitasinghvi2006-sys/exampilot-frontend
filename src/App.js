@@ -289,6 +289,14 @@ function buildWhatsAppLink() {
   );
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
 }
+function buildYoutubeSearchUrl(taskText, examType) {
+  const cleaned = String(taskText || "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const query = [cleaned, examType].filter(Boolean).join(" ");
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+}
 
 function ReflectionOptionGroup({ label, value, options, onSelect }) {
   return (
@@ -819,7 +827,7 @@ async function requestPlan(payload, token) {
 }
 
 // ─── Plan Card ──────────────────────────────────────────────────────────────────
-function PlanCard({ item, highlight, planKey, progressMap, onToggleTask }) {
+function PlanCard({ item, highlight, planKey, progressMap, onToggleTask, examType }) {
   const taskCount = countPlanTasks(item);
   const itemTitle = getTaskOwnerTitle(item);
   const renderSections = getRenderableSections(item);
@@ -844,12 +852,17 @@ function PlanCard({ item, highlight, planKey, progressMap, onToggleTask }) {
                   const taskId = buildTaskId(planKey, itemTitle, section.title, task);
                   const checked = Boolean(progressMap[taskId]);
                   return (
-                    <li key={`${item.id}-${section.title}-${index}`} style={{ ...styles.taskItem, ...(checked ? styles.taskItemDone : {}) }}>
+                  <li key={`${item.id}-${section.title}-${index}`} style={{ ...styles.taskItem, ...(checked ? styles.taskItemDone : {}) }}>
+                    <div style={styles.taskRow}>
                       <label style={styles.taskLabel}>
                         <input type="checkbox" checked={checked} onChange={() => onToggleTask(taskId)} style={styles.taskCheckbox} />
-                        <span style={checked ? styles.taskTextDone : undefined}>{task}</span>
+                          <span style={checked ? styles.taskTextDone : undefined}>{task}</span>
                       </label>
-                    </li>
+                    <a href={buildYoutubeSearchUrl(task, examType)} target="_blank" rel="noreferrer" style={styles.watchLink}>
+                      ▶ Watch
+                    </a>
+                    </div>
+                  </li>
                   );
                 })}
               </ul>
@@ -863,10 +876,15 @@ function PlanCard({ item, highlight, planKey, progressMap, onToggleTask }) {
             const checked = Boolean(progressMap[taskId]);
             return (
               <li key={`${item.id}-task-${index}`} style={{ ...styles.taskItem, ...(checked ? styles.taskItemDone : {}) }}>
-                <label style={styles.taskLabel}>
-                  <input type="checkbox" checked={checked} onChange={() => onToggleTask(taskId)} style={styles.taskCheckbox} />
-                  <span style={checked ? styles.taskTextDone : undefined}>{task}</span>
-                </label>
+                <div style={styles.taskRow}>
+                    <label style={styles.taskLabel}>
+                      <input type="checkbox" checked={checked} onChange={() => onToggleTask(taskId)} style={styles.taskCheckbox} />
+                      <span style={checked ? styles.taskTextDone : undefined}>{task}</span>
+                    </label>
+                    <a href={buildYoutubeSearchUrl(task, examType)} target="_blank" rel="noreferrer" style={styles.watchLink}>
+                      ▶ Watch
+                    </a>
+                </div>
               </li>
             );
           })}
@@ -1504,7 +1522,7 @@ function handleRegenerateWithWeakTopics() {
     </div>
     <div style={styles.planStack}>
       {result.fullPlan.map((item) => (
-        <PlanCard key={item.id} item={item} planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} />
+        <PlanCard item={todayPlan} highlight planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} />
       ))}
     </div>
   </>
@@ -1732,6 +1750,8 @@ const styles = {
   taskList: { margin: 0, paddingLeft: "18px", color: "#e2e8f0", display: "grid", gap: "10px" },
   taskLabel: { display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer" },
   taskCheckbox: { width: "16px", height: "16px", marginTop: "4px", accentColor: "#14b8a6", flexShrink: 0 },
+  taskRow: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" },
+  watchLink: { flexShrink: 0, display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "999px", background: "rgba(248, 113, 113, 0.12)", color: "#fca5a5", fontSize: "0.78rem", fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" },
   taskItem: { lineHeight: 1.55 },
   taskItemDone: { color: "#94a3b8" },
   taskTextDone: { textDecoration: "line-through", opacity: 0.75 },
