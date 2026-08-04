@@ -918,6 +918,7 @@ function PlanCard({ item, highlight, planKey, progressMap, onToggleTask, examTyp
                     </a>
                 </div>
               </li>
+              
             );
           })}
         </ul>
