@@ -323,7 +323,39 @@ function ReflectionOptionGroup({ label, value, options, onSelect }) {
     </div>
   );
 }
-
+function TaskQuiz({ taskId, quiz, answers, onAnswer }) {
+  if (!quiz) return null;
+  if (quiz.error) return <p style={styles.quizError}>{quiz.error}</p>;
+  return (
+    <div style={styles.quizBox}>
+      {quiz.map((q, qIndex) => {
+        const answerKey = `${taskId}::${qIndex}`;
+        const selected = answers[answerKey];
+        const answered = selected !== undefined;
+        return (
+          <div key={qIndex} style={styles.quizQuestion}>
+            <p style={styles.quizQuestionText}>{qIndex + 1}. {q.question}</p>
+            <div style={styles.quizOptions}>
+              {q.options.map((option, oIndex) => {
+                const isCorrect = oIndex === q.correctIndex;
+                const isSelected = selected === oIndex;
+                let optionStyle = styles.quizOption;
+                if (answered && isSelected && isCorrect) optionStyle = { ...styles.quizOption, ...styles.quizOptionCorrect };
+                else if (answered && isSelected && !isCorrect) optionStyle = { ...styles.quizOption, ...styles.quizOptionWrong };
+                else if (answered && isCorrect) optionStyle = { ...styles.quizOption, ...styles.quizOptionCorrect };
+                return (
+                  <button key={oIndex} type="button" disabled={answered} onClick={() => onAnswer(taskId, qIndex, oIndex)} style={optionStyle}>
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 function buildUpiPaymentLink() {
   const params = new URLSearchParams({
     pa: UPI_ID,
@@ -827,7 +859,7 @@ async function requestPlan(payload, token) {
 }
 
 // ─── Plan Card ──────────────────────────────────────────────────────────────────
-function PlanCard({ item, highlight, planKey, progressMap, onToggleTask, examType }) {
+function PlanCard({ item, highlight, planKey, progressMap, onToggleTask, examType, quizByTaskId, quizLoadingTaskId, quizAnswers, onGenerateQuiz, onQuizAnswer }) {
   const taskCount = countPlanTasks(item);
   const itemTitle = getTaskOwnerTitle(item);
   const renderSections = getRenderableSections(item);
@@ -943,6 +975,9 @@ export default function App() {
   const [progressMap, setProgressMap] = useState(loadStoredProgress(""));
   const [showUpcomingDays, setShowUpcomingDays] = useState(false);
   const [serverPlanRowId, setServerPlanRowId] = useState(null);
+  const [quizByTaskId, setQuizByTaskId] = useState({});
+  const [quizLoadingTaskId, setQuizLoadingTaskId] = useState(null);
+  const [quizAnswers, setQuizAnswers] = useState({});
 
   
   const previewPlan = result.fullPlan.slice(0, FREE_PREVIEW_DAYS);
@@ -1124,7 +1159,38 @@ export default function App() {
     return next;
   });
   }
+  async function handleGenerateQuiz(taskId, taskText) {
+  if (quizByTaskId[taskId] || quizLoadingTaskId) return;
+  setQuizLoadingTaskId(taskId);
+  try {
+    const endpoints = buildApiCandidates().map((url) => url.replace(/\/study-plan\/?$/, "/task-quiz"));
+    let lastError = new Error("Unable to generate quiz right now.");
+    let quizData = null;
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ task: taskText, examType: resultMeta?.examType || formData.examType }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) { lastError = new Error(data.error || "Quiz generation failed."); continue; }
+        quizData = data.questions;
+        break;
+      } catch (err) { lastError = err instanceof Error ? err : lastError; }
+    }
+    if (!quizData) throw lastError;
+    setQuizByTaskId((current) => ({ ...current, [taskId]: quizData }));
+  } catch (err) {
+    setQuizByTaskId((current) => ({ ...current, [taskId]: { error: err instanceof Error ? err.message : "Could not load quiz." } }));
+  } finally {
+    setQuizLoadingTaskId(null);
+  }
+  }
 
+  function handleQuizAnswer(taskId, questionIndex, optionIndex) {
+  setQuizAnswers((current) => ({ ...current, [`${taskId}::${questionIndex}`]: optionIndex }));
+  }
   function handleDailyCheckIn() {
     if (!canMarkTodayDone) return;
     const completionPercent = todayProgressPercent;
@@ -1510,7 +1576,7 @@ function handleRegenerateWithWeakTopics() {
 
             {viewMode === "today" ? (
               todayPlan ? (
-                <PlanCard item={todayPlan} highlight planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} />
+                <PlanCard item={todayPlan} highlight planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} examType={resultMeta?.examType || formData.examType} quizByTaskId={quizByTaskId} quizLoadingTaskId={quizLoadingTaskId} quizAnswers={quizAnswers} onGenerateQuiz={handleGenerateQuiz} onQuizAnswer={handleQuizAnswer} />
               ) : (
                 <p style={styles.emptyCopy}>Today&apos;s plan is not available yet.</p>
               )
@@ -1522,7 +1588,7 @@ function handleRegenerateWithWeakTopics() {
     </div>
     <div style={styles.planStack}>
       {result.fullPlan.map((item) => (
-        <PlanCard item={todayPlan} highlight planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} />
+        <PlanCard item={todayPlan} highlight planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} examType={resultMeta?.examType || formData.examType} quizByTaskId={quizByTaskId} quizLoadingTaskId={quizLoadingTaskId} quizAnswers={quizAnswers} onGenerateQuiz={handleGenerateQuiz} onQuizAnswer={handleQuizAnswer} />
       ))}
     </div>
   </>
@@ -1534,7 +1600,7 @@ function handleRegenerateWithWeakTopics() {
     </div>
     <div style={styles.planStack}>
       {previewPlan.map((item) => (
-        <PlanCard key={item.id} item={item} planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} />
+        <PlanCard item={todayPlan} highlight planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} examType={resultMeta?.examType || formData.examType} quizByTaskId={quizByTaskId} quizLoadingTaskId={quizLoadingTaskId} quizAnswers={quizAnswers} onGenerateQuiz={handleGenerateQuiz} onQuizAnswer={handleQuizAnswer} />
       ))}
     </div>
     <div style={styles.resumeCard}>
@@ -1752,6 +1818,16 @@ const styles = {
   taskCheckbox: { width: "16px", height: "16px", marginTop: "4px", accentColor: "#14b8a6", flexShrink: 0 },
   taskRow: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" },
   watchLink: { flexShrink: 0, display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "999px", background: "rgba(248, 113, 113, 0.12)", color: "#fca5a5", fontSize: "0.78rem", fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" },
+  taskActions: { display: "flex", gap: "8px", flexWrap: "wrap", flexShrink: 0 },
+  quizButton: { padding: "4px 10px", borderRadius: "999px", border: "1px solid rgba(196, 181, 253, 0.35)", background: "rgba(196, 181, 253, 0.1)", color: "#ddd6fe", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" },
+  quizBox: { marginTop: "10px", padding: "12px", borderRadius: "12px", background: "rgba(255, 255, 255, 0.03)", display: "grid", gap: "12px" },
+  quizQuestion: { display: "grid", gap: "8px" },
+  quizQuestionText: { margin: 0, color: "#f8fafc", fontSize: "0.88rem", lineHeight: 1.5 },
+  quizOptions: { display: "grid", gap: "6px" },
+  quizOption: { textAlign: "left", padding: "8px 12px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)", background: "rgba(255, 255, 255, 0.03)", color: "#e2e8f0", fontSize: "0.84rem", cursor: "pointer" },
+  quizOptionCorrect: { border: "1px solid rgba(74, 222, 128, 0.5)", background: "rgba(34, 197, 94, 0.14)", color: "#86efac" },
+  quizOptionWrong: { border: "1px solid rgba(248, 113, 113, 0.5)", background: "rgba(239, 68, 68, 0.14)", color: "#fca5a5" },
+  quizError: { margin: "8px 0 0", color: "#fca5a5", fontSize: "0.82rem" },
   taskItem: { lineHeight: 1.55 },
   taskItemDone: { color: "#94a3b8" },
   taskTextDone: { textDecoration: "line-through", opacity: 0.75 },
