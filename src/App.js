@@ -894,6 +894,23 @@ function PlanCard({ item, highlight, planKey, progressMap, onToggleTask, examTyp
                       ▶ Watch
                     </a>
                     </div>
+                      <li key={`${item.id}-${section.title}-${index}`} style={{ ...styles.taskItem, ...(checked ? styles.taskItemDone : {}) }}>
+                        <div style={styles.taskRow}>
+                          <label style={styles.taskLabel}>
+                              <input type="checkbox" checked={checked} onChange={() => onToggleTask(taskId)} style={styles.taskCheckbox} />
+                                <span style={checked ? styles.taskTextDone : undefined}>{task}</span>
+                          </label>
+                          <div style={styles.taskActions}>
+                            <a href={buildYoutubeSearchUrl(task, examType)} target="_blank" rel="noreferrer" style={styles.watchLink}>▶ Watch</a>
+                              {!quizByTaskId[taskId] ? (
+                              <button type="button" onClick={() => onGenerateQuiz(taskId, task)} disabled={quizLoadingTaskId === taskId} style={styles.quizButton}>
+                              {quizLoadingTaskId === taskId ? "Loading..." : "Quick check"}
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                        <TaskQuiz taskId={taskId} quiz={quizByTaskId[taskId]} answers={quizAnswers} onAnswer={onQuizAnswer} />
+                      </li>
                   </li>
                   );
                 })}
