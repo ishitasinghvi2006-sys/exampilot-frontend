@@ -857,7 +857,46 @@ async function requestPlan(payload, token) {
   }
   throw lastError;
 }
+function buildExtractSyllabusCandidates() {
+  const rawValues = [
+    typeof process !== "undefined" ? process.env.REACT_APP_API_ENDPOINT : "",
+    typeof process !== "undefined" ? process.env.REACT_APP_API_URL : "",
+    typeof process !== "undefined" ? process.env.REACT_APP_BACKEND_URL : "",
+    DEFAULT_BACKEND_BASE,
+  ].filter(Boolean);
+  const candidates = [];
+  rawValues.forEach((value) => {
+    const normalized = String(value).trim();
+    if (!normalized) return;
+    candidates.push(`${normalized.replace(/\/$/, "")}/extract-syllabus`);
+  });
+  return [...new Set(candidates)];
+}
 
+async function requestSyllabusExtraction(file, token) {
+  const endpoints = buildExtractSyllabusCandidates();
+  const formPayload = new FormData();
+  formPayload.append("file", file);
+  let lastError = new Error("Unable to reach ExamPilot right now.");
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formPayload,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        lastError = new Error(data.error || `Extraction failed with status ${response.status}.`);
+        continue;
+      }
+      return data;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Something went wrong while reading the file.");
+    }
+  }
+  throw lastError;
+}
 // ─── Plan Card ──────────────────────────────────────────────────────────────────
 function PlanCard({ item, highlight, planKey, progressMap, onToggleTask, examType, quizByTaskId, quizLoadingTaskId, quizAnswers, onGenerateQuiz, onQuizAnswer }) {
   const taskCount = countPlanTasks(item);
@@ -970,6 +1009,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState("today");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [uploadState, setUploadState] = useState({ loading: false, error: "" });
   const [founderMode] = useState(getFounderMode);
   const [planUsageCount, setPlanUsageCount] = useState(0);
   const [isPaid, setIsPaid] = useState(false);
@@ -1166,6 +1206,32 @@ export default function App() {
     return next;
   });
   }
+  async function handleSyllabusFileChange(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+
+  if (file.type !== "application/pdf") {
+    setUploadState({
+      loading: false,
+      error: "That looks like a photo, not a PDF. Quick fix: open it in your phone's gallery and copy the text directly — iPhone: tap the text in the photo (Live Text); Android: open it in Google Lens and tap 'Copy text'. Then paste it into the box below. Takes about 10 seconds.",
+    });
+    return;
+  }
+
+  setUploadState({ loading: true, error: "" });
+  try {
+    const data = await requestSyllabusExtraction(file, session?.access_token);
+    setFormData((current) => ({ ...current, syllabus: data.text || "" }));
+    setUploadState({ loading: false, error: "" });
+  } catch (uploadError) {
+    const message = uploadError instanceof Error ? uploadError.message : "Could not read this file.";
+    const friendly = /scan|image/i.test(message)
+      ? "This looks like a scanned PDF or photo — that's not supported yet. Please paste your syllabus text instead."
+      : message;
+    setUploadState({ loading: false, error: friendly });
+  }
+}
   async function handleGenerateQuiz(taskId, taskText) {
   if (quizByTaskId[taskId] || quizLoadingTaskId) return;
   setQuizLoadingTaskId(taskId);
@@ -1345,7 +1411,12 @@ function handleRegenerateWithWeakTopics() {
               Syllabus
               <textarea name="syllabus" value={formData.syllabus} onChange={handleChange} placeholder="Paste your syllabus, units, or exam topics here..." style={styles.textarea} rows={9} required />
             </label>
-
+            <div style={styles.label}>
+              <span>Or upload a PDF syllabus (text-based PDFs only for now)</span>
+              <input type="file" accept="application/pdf" onChange={handleSyllabusFileChange} disabled={uploadState.loading} style={styles.input} />
+              {uploadState.loading ? <p style={styles.helperText}>Reading your PDF…</p> : null}
+              {uploadState.error ? <p style={{ ...styles.helperText, color: "#fca5a5" }}>{uploadState.error}</p> : null}
+            </div>
             <div style={styles.buttonRow}>
               <button type="submit" disabled={loading} style={styles.primaryButton}>
                 {loading ? "Generating..." : "Generate Study Plan"}
