@@ -1034,7 +1034,7 @@ export default function App() {
   const todayPlan = result.todayPlan || result.fullPlan[0] || null;
   const resultMeta = result.meta || null;
   const freeFullPlansLeft = Math.max(FREE_FULL_PLAN_LIMIT - planUsageCount, 0);
-  const hasFullPlanAccess = founderMode || isPaid || (planUsageCount > 0 && planUsageCount <= FREE_FULL_PLAN_LIMIT);
+  const hasFullPlanAccess = founderMode || isPaid;
   const trackablePlanItems = hasFullPlanAccess ? result.fullPlan : previewPlan;
   const allPlanTasks = collectPlanTasks(trackablePlanItems, result.planKey);
   const totalTaskCount = allPlanTasks.length;
@@ -1365,7 +1365,7 @@ function handleRegenerateWithWeakTopics() {
           </p>
           <div style={{ marginTop: "16px", padding: "12px 16px", borderRadius: "12px", background: "rgba(45,212,191,0.1)", border: "1px solid rgba(45,212,191,0.25)" }}>
             <p style={{ margin: 0, color: "#5eead4", fontSize: "14px", lineHeight: 1.5 }}>
-              🎉 Your first {FREE_FULL_PLAN_LIMIT} plans are free. After that, unlock full access for ₹{PAYMENT_AMOUNT}.
+              🎉 First 2 days of every plan are free to preview. ₹{PAYMENT_AMOUNT} unlocks full lifetime access.
             </p>
           </div>
         </section>
@@ -1678,7 +1678,7 @@ function handleRegenerateWithWeakTopics() {
     </div>
     <div style={styles.planStack}>
       {previewPlan.map((item) => (
-        <PlanCard item={todayPlan} highlight planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} examType={resultMeta?.examType || formData.examType} quizByTaskId={quizByTaskId} quizLoadingTaskId={quizLoadingTaskId} quizAnswers={quizAnswers} onGenerateQuiz={handleGenerateQuiz} onQuizAnswer={handleQuizAnswer} />
+        <PlanCard key={item.id} item={item} highlight planKey={result.planKey} progressMap={progressMap} onToggleTask={handleToggleTask} examType={resultMeta?.examType || formData.examType} quizByTaskId={quizByTaskId} quizLoadingTaskId={quizLoadingTaskId} quizAnswers={quizAnswers} onGenerateQuiz={handleGenerateQuiz} onQuizAnswer={handleQuizAnswer} />
       ))}
     </div>
     <div style={styles.resumeCard}>
